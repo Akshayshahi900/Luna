@@ -1,17 +1,14 @@
-# pip install -qU langchain langchain-ollama
-from langchain.agents import create_agent
-from langchain_ollama import ChatOllama
+"""
+Legacy entry shim.
 
-model = ChatOllama(
-    model="llama3.1:8b",
-)
-agent = create_agent(
-    model=model,
-    system_prompt="You are a helpful assistant",
-)
+Prefer one of these instead:
+  - ``uv run luna``
+  - ``python -m luna.cli.chat``
 
-result = agent.invoke(
-    {"messages": [{"role": "user", "content": "What's the weather in agra?"}]}
-)
+This file only exists so older paths that imported ``luna.core.main`` still work.
+"""
 
-print(result["messages"][-1].content_blocks)
+from luna.cli.chat import main
+
+if __name__ == "__main__":
+    main()

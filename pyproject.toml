@@ -1,16 +1,18 @@
 [project]
 name = "luna"
 version = "0.1.0"
-description = "Add your description here"
+description = "Scalable LangGraph chatbot with memory and MCP tools"
 readme = "README.md"
 authors = [
     { name = "Akshay shahi", email = "shahiakshay900@gmail.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "langchain>=1.4.3",
+    "langchain[mcp]>=1.4.3",
     "langchain-ollama>=1.1.0",
     "langgraph>=1.2.12",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "pydantic-settings>=2.15.0",
 ]
 
 [project.scripts]

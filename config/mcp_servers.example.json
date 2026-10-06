@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "demo": {
+      "command": "uv",
+      "args": ["run", "python", "servers/demo_mcp_server.py"]
+    },
+    "langchain_docs": {
+      "url": "https://docs.langchain.com/mcp"
+    }
+  }
+}
