@@ -14,7 +14,7 @@ You type a message → Luna sends it to a **language model** (the “brain”) �
 Past messages are **remembered** using a memory system called a **checkpointer**, so Luna can refer to earlier turns in the same chat.
 
 ```
-You type ──► CLI ──► Agent (LangGraph) ──► Model (Ollama)
+You type ──► CLI ──► Agent (LangGraph) ──► Model (OpenRouter)
                          │                      │
                          │                      └── maybe calls tools
                          └── saves/loads chat history (memory)
@@ -26,7 +26,7 @@ You type ──► CLI ──► Agent (LangGraph) ──► Model (Ollama)
 
 | Word | Plain meaning |
 | --- | --- |
-| **LLM / model** | The AI that generates replies (here: Ollama running a local model like `phi4-mini`) |
+| **LLM / model** | The AI that generates replies (here: a model accessed through OpenRouter) |
 | **Agent** | A loop: model thinks → maybe uses tools → thinks again → finally replies |
 | **LangGraph** | Library that runs that loop as a graph (nodes = steps) |
 | **Tool** | A normal Python function the model is allowed to call |
@@ -44,7 +44,7 @@ You type ──► CLI ──► Agent (LangGraph) ──► Model (Ollama)
 2. `main` calls `run_chat()`.
 3. `run_chat` calls `build_agent()` which:
    - loads settings
-   - creates the Ollama chat model
+   - creates the OpenRouter chat model
    - creates memory (SQLite or in-RAM)
    - collects tools (built-in + MCP)
    - builds one LangGraph agent with all of that
@@ -123,7 +123,7 @@ Think of this as a recipe:
 
 | Ingredient | Where it comes from |
 | --- | --- |
-| Brain (LLM) | `ChatOllama(model=...)` |
+| Brain (LLM) | `ChatOpenAI(model=..., base_url=OpenRouter)` |
 | Memory | `create_checkpointer(...)` |
 | Tools | `build_tool_registry(...)` |
 | Personality | `system_prompt` from settings |
@@ -330,7 +330,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
 
 | Symptom | Likely cause |
 | --- | --- |
-| `ConnectError` when chatting | Ollama is not running (`ollama serve`) or model not pulled |
+| Authentication error when chatting | Set `LUNA_OPENROUTER_API_KEY` in `.env` and check the key is valid |
 | MCP tools missing | Config empty, MCP disabled, or demo server failed to start |
 | Forgets everything after restart | Using `memory` backend instead of `sqlite` |
 | Forgets after `/new` | Expected — new `thread_id` |

@@ -7,7 +7,7 @@ This is the "factory". It does not chat with you. It builds the object
 that *can* chat.
 
 Analogy:
-  - Model      = brain (Ollama)
+  - Model      = brain (OpenRouter)
   - Tools      = hands (calculator, MCP tools, ...)
   - Checkpointer = notebook (remembers the conversation)
   - create_agent = wires brain + hands + notebook into one runnable graph
@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_ollama import ChatOllama
+from langchain_openai import ChatOpenAI
 
 from luna.agent.memory import create_checkpointer
 from luna.config import Settings, get_settings
@@ -78,8 +78,14 @@ async def build_agent(
     """
     settings = settings or get_settings()
 
-    # 1) Brain — talks to a local Ollama server.
-    model = ChatOllama(model=settings.model_name)
+    # 1) Brain — talks to OpenRouter's OpenAI-compatible API.
+    if not settings.openrouter_api_key:
+        raise ValueError("Set LUNA_OPENROUTER_API_KEY in your .env file to use OpenRouter.")
+    model = ChatOpenAI(
+        model=settings.model_name,
+        base_url="https://openrouter.ai/api/v1",
+        api_key=settings.openrouter_api_key,
+    )
 
     # 2) Notebook — stores message history per thread_id.
     # Must be async (AsyncSqliteSaver) because the CLI uses agent.ainvoke().

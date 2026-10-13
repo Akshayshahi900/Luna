@@ -63,7 +63,7 @@ Build a Python chatbot on **LangGraph / LangChain** that:
 ### 3.1 Dependencies (`pyproject.toml`)
 
 - `langchain[mcp]` — agents + built-in `langchain.mcp.MCPAdapter` (FastMCP under the hood)
-- `langchain-ollama` — local LLM via Ollama
+- `langchain-openai` — OpenRouter chat model through its OpenAI-compatible API
 - `langgraph` — agent graph runtime
 - `langgraph-checkpoint-sqlite` — durable conversation memory
 - `pydantic-settings` — typed settings from env / `.env`
@@ -196,7 +196,8 @@ Commands: `/help`, `/tools`, `/thread`, `/new`, `/quit`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `LUNA_MODEL_NAME` | `phi4-mini:latest` | Ollama model tag |
+| `LUNA_MODEL_NAME` | `nvidia/nemotron-3-ultra-550b-a55b` | OpenRouter model slug |
+| `LUNA_OPENROUTER_API_KEY` | unset | OpenRouter API key |
 | `LUNA_SYSTEM_PROMPT` | Luna helper prompt | Agent system message |
 | `LUNA_MEMORY_BACKEND` | `sqlite` | `sqlite` or `memory` |
 | `LUNA_CHECKPOINT_PATH` | `./data/luna_memory.sqlite` | SQLite file path |
@@ -215,9 +216,7 @@ Copy `config/env.example` → `.env` to customize.
 # Install
 uv sync
 
-# Ensure Ollama + model
-ollama serve   # if not already running
-ollama pull phi4-mini:latest
+# Set LUNA_OPENROUTER_API_KEY in .env before chatting
 
 # Optional: disable remote MCP while iterating
 # export LUNA_ENABLE_MCP_TOOLS=false
@@ -246,7 +245,7 @@ Natural next steps (not implemented in spec1):
 2. **HTTP API** — FastAPI wrapper around `build_agent()` with per-user `thread_id`.
 3. **Auth’d MCP** — bearer / OAuth via FastMCP client options on `MCPAdapter`.
 4. **Dynamic tool hot-reload** — re-run `list_tools(cache_mode="refresh")` without process restart.
-5. **Alternate models** — swap `ChatOllama` for any LangChain chat model behind settings.
+5. **Alternate models** — change `LUNA_MODEL_NAME` to another OpenRouter model slug.
 6. **Middleware** — LangChain agent middleware for logging, HITL interrupts, rate limits.
 
 ---

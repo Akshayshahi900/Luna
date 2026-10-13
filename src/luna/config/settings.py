@@ -3,11 +3,12 @@ Luna settings — one place for all configuration knobs.
 
 BEGINNER MAP
 ------------
-Hard-coding "phi4-mini:latest" in ten files is painful to change.
+Hard-coding a model name in ten files is painful to change.
 Instead, Settings holds defaults, and you can override them with
 environment variables that start with LUNA_:
 
-  export LUNA_MODEL_NAME=llama3.2:latest
+  export LUNA_MODEL_NAME=nvidia/nemotron-3-ultra-550b-a55b
+  export LUNA_OPENROUTER_API_KEY=sk-or-...
   export LUNA_MEMORY_BACKEND=memory
   export LUNA_ENABLE_MCP_TOOLS=false
 
@@ -51,14 +52,17 @@ class Settings(BaseSettings):
 
     # --- LLM (the brain) ---
     model_name: str = Field(
-        default="phi4-mini:latest",
-        description="Ollama model tag, e.g. phi4-mini:latest",
+        default="nvidia/nemotron-3-ultra-550b-a55b",
+        description="OpenRouter model slug",
     )
+    # Loaded from LUNA_OPENROUTER_API_KEY in the project-root .env file.
+    openrouter_api_key: str | None = Field(default=None, repr=False)
     system_prompt: str = Field(
         default=(
             "You are Luna, a helpful assistant. "
-            "Use tools when they help you answer accurately. "
-            "Remember prior turns in this conversation."
+            # "Use tools when they help you answer accurately. "
+            # "Remember prior turns in this conversation."
+            "use tools for answering the problems"
         ),
         description="Instructions the model always sees first",
     )

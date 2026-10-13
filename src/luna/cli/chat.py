@@ -1,23 +1,3 @@
-"""
-Chat UI for Luna (the part you interact with).
-
-BEGINNER MAP
-------------
-This file is the front door. It does NOT contain the AI brain.
-
-Flow:
-  1. Start → build the agent once (model + memory + tools).
-  2. Loop forever: read your text → send to agent → print reply.
-  3. Special lines starting with "/" are local commands (no AI).
-
-Key idea — thread_id:
-  Every conversation has an ID (like a chat room name).
-  Same ID  → Luna remembers previous messages.
-  /new     → new ID → blank memory for a fresh chat.
-
-Read next: luna/agent/builder.py (how the agent is assembled).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -68,15 +48,7 @@ def _extract_reply(result: dict[str, Any]) -> str:
 
 
 async def run_chat(thread_id: str | None = None) -> None:
-    """Interactive chat loop: You> ... Luna> ...
-
-    Steps:
-      1. Load settings (model name, memory type, etc.).
-      2. Build the agent once (expensive: connects to MCP, opens DB).
-      3. Read lines from the keyboard until /quit.
-    """
     settings = get_settings()
-    # If caller didn't pass a thread id, use the default from settings ("default").
     thread_id = thread_id or settings.default_thread_id
 
     print("Luna — LangGraph chatbot")
@@ -87,14 +59,14 @@ async def run_chat(thread_id: str | None = None) -> None:
     )
     print("Type /help for commands. Building agent...\n")
 
-    # Build once. Rebuilding every message would be slow (MCP reconnect, etc.).
-    agent, registry = await build_agent(settings)
+    agent, registry = await build_agent(settings)   # creates a model with memory(checkpointer) and tools
+
     tool_names = registry.names()
     print(f"Loaded {len(tool_names)} tool(s): {', '.join(tool_names) or '(none)'}\n")
 
     while True:
         try:
-            user_input = input("You> ").strip()
+            user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             # Ctrl+C / Ctrl+D → exit cleanly.
             print("\nBye.")
@@ -135,17 +107,12 @@ async def run_chat(thread_id: str | None = None) -> None:
                 {"messages": [{"role": "user", "content": user_input}]},
                 config=config,
             )
-            print(f"Luna> {_extract_reply(result)}\n")
+            print(f"Luna: {_extract_reply(result)}\n")
         except Exception as exc:  # noqa: BLE001 — show errors to the user in the CLI
             print(f"Error: {exc}\n", file=sys.stderr)
 
 
 def main() -> None:
-    """Sync entry point used by the `luna` console script.
-
-    The chat loop is async (awaits model/MCP calls), so we start an event loop
-    with asyncio.run(...).
-    """
     asyncio.run(run_chat())
 
 

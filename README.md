@@ -9,8 +9,9 @@ Scalable LangGraph chatbot with conversation memory and pluggable tools
 # 1. Install (uses uv)
 uv sync
 
-# 2. Make sure Ollama is running with your model
-ollama pull phi4-mini:latest
+# 2. Add your OpenRouter credentials to .env
+cp config/env.example .env
+# Replace `your_openrouter_api_key_here` with your key in .env
 
 # 3. Chat
 uv run luna
