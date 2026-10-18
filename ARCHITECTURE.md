@@ -25,7 +25,7 @@ voice-first web UI (`docs/web-ui.md`).
    │        └───────┬──────────────┬──────────────┬──────────────┬─────────────┘
    │                ▼              ▼              ▼              ▼
    │         ask_researcher    ask_files       ask_coder     ask_assistant
-   │         (Tavily)          (fs tools)      (fs + shell)  (tagged MCP: to-dos, mail)
+   │         (Tavily)          (fs tools)      (fs + shell)  (tagged MCP: to-dos, mail, calendar)
    │         each: own ReAct loop, limit + timeout, TaskBudget, optional HITL,
    │               fresh context per call, shares the main checkpointer
    │                │              │              │              │
@@ -34,7 +34,13 @@ voice-first web UI (`docs/web-ui.md`).
  Storage: data/luna_memory.sqlite (checkpoints: thread history, scratchpad,
           paused helper runs) · data/luna_longterm.sqlite (long-term memory:
           memories, suggestions, history; only the user writes memories)
-          · workspace/ (files the helpers may touch)
+          · workspace/ (files the helpers may touch) · data/tasks.json (to-dos,
+          synced with Google Tasks) · data/google/ (OAuth client + token)
+
+ Google: one sign-in (integrations/google.py, `luna-google-auth`) shared by
+         mail (Gmail API) · google (Calendar) · tasks (Google Tasks sync).
+         The tasks and google servers import the mail server's fetch_email
+         to turn an email into a to-do or an event.
 ```
 
 ## One message, end to end
@@ -117,12 +123,18 @@ src/luna/
     limits.py              cap_output
     registry.py            ToolRegistry
   mcp/loader.py            read MCP config, split_by_agent, is_risky_tool_name
-config/mcp_servers.json    MCP servers: demo (main), tasks + mail (assistant), LangChain docs (researcher)
+  integrations/google.py   Google OAuth shared by the servers: credentials (refresh, scope check),
+                           service, execute, luna-google-auth
+config/mcp_servers.json    MCP servers: demo (main), tasks + mail + google (assistant), LangChain docs (researcher)
 config/persona.md          optional extra instructions for Luna (git-ignored; see persona.example.md)
 servers/demo_mcp_server.py sample MCP server
-servers/tasks_mcp_server.py local to-dos (data/tasks.json) for ask_assistant
-servers/mail_mcp_server.py  inbox read + send / reply over IMAP/SMTP for ask_assistant
+servers/tasks_mcp_server.py local to-dos (data/tasks.json) for ask_assistant, two-way
+                           synced with Google Tasks; add_task_from_email
+servers/mail_mcp_server.py  inbox read + send / reply for ask_assistant over the Gmail API
+                           (default) or IMAP/SMTP; fetch_email / email_reference for the others
                            (sending asks for approval; docs/mail.md)
+servers/google_mcp_server.py Google Calendar for ask_assistant; get_agenda adds to-dos;
+                           create_event_from_email via the mail server's fetch_email (docs/google.md)
 tests/                     pytest suite (fake models, no API key)
 web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
   src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
@@ -130,6 +142,7 @@ web/                       browser UI (Vite + React + React Three Fiber); `npm r
 docs/web-ui.md             running the web UI, WebSocket protocol
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
+docs/google.md             Google sign-in (Gmail, Calendar, Tasks), calendar tools, to-do sync, email → to-do / event
 spec/                      design specs; DECISIONS.md; this file
 ```
 

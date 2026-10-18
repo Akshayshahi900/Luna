@@ -2,11 +2,28 @@
 
 Luna's **assistant** helper (`ask_assistant`) reads and sends email through
 `servers/mail_mcp_server.py`, an MCP server listed in
-`config/mcp_servers.json` with `"agent": "assistant"`. It uses plain
-IMAP (reading) and SMTP (sending), so any provider with app passwords works.
+`config/mcp_servers.json` with `"agent": "assistant"`. Two backends,
+chosen with `LUNA_MAIL_BACKEND`; the tools are the same for both:
 
-## Set up
+- **`gmail`** (default): the Gmail API, with the one Google sign-in shared
+  with Calendar and Tasks. Message ids from Gmail are the uids.
+- **`imap`**: plain IMAP (reading) and SMTP (sending), so any provider with
+  app passwords works.
 
+## Set up: Gmail API (default)
+
+Follow [`docs/google.md`](google.md#set-up-once) (enable the Gmail API, add
+an OAuth Desktop client, run `uv run luna-google-auth`). Nothing else: the
+sender address comes from your Gmail profile. Reading uses the
+`gmail.readonly` scope, so it can't mark mail as read; sending uses
+`gmail.send`, and replies stay in their Gmail thread. `folder` is a Gmail
+label (`INBOX`, `SENT`, `SPAM`, `TRASH`, `STARRED`, … or one of yours), and
+search terms may be any language. Not signed in: the tools answer "Google is
+not connected: run `uv run luna-google-auth`".
+
+## Set up: IMAP / SMTP
+
+0. Put `LUNA_MAIL_BACKEND=imap` in `.env`.
 1. Turn on 2-step verification for your account and create an **app password**
    (Gmail / Google Workspace: Google Account → Security → App passwords).
    Never use your normal login password.
@@ -43,8 +60,9 @@ Without them the mail tools answer "Mail is not set up…".
 | `send_email(to, subject, body, cc)` | **yes** | new plain-text email |
 | `reply_to_email(uid, to, body, cc, folder)` | **yes** | threaded reply (`Re:`, `In-Reply-To`, `References`) |
 
-Reading never marks a message as read: folders are opened read-only and
-bodies are fetched with `BODY.PEEK`.
+Reading never marks a message as read: with Gmail the sign-in is
+read-only for mail, with IMAP folders are opened read-only and bodies are
+fetched with `BODY.PEEK`.
 
 ## Human in the loop
 
@@ -78,4 +96,8 @@ you: reply to the invoice email saying it's paid
      ⏸  Approval needed: reply_to_email {"uid": "7", "to": "accounts@shop.com", ...}
 ```
 
-Tests: `tests/test_mail_server.py` (fake IMAP/SMTP, no network).
+To turn an email into a to-do (synced to Google Tasks) or a calendar event, see
+[`docs/google.md`](google.md#from-email-to-to-do-or-event) (`add_task_from_email`,
+`create_event_from_email`).
+
+Tests: `tests/test_mail_server.py` (fake IMAP/SMTP and fake Gmail, no network).

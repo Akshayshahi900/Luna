@@ -81,3 +81,27 @@ def make_looping_model():
         return FakeToolModel(messages=replies)
 
     return make
+
+
+@pytest.fixture(autouse=True)
+def _no_real_google(tmp_path, monkeypatch):
+    """Never use a real Google sign-in in tests (Gmail, Calendar, Tasks sync).
+
+    Tests that need Google replace luna.integrations.google.service with fakes.
+    """
+    monkeypatch.setenv("LUNA_GOOGLE_TOKEN_PATH", str(tmp_path / "no-google-token.json"))
+
+
+class FakeRequest:
+    """A googleapiclient request: nothing happens until execute()."""
+
+    def __init__(self, run):
+        self._run = run
+
+    def execute(self):
+        return self._run()
+
+
+def missing(kind: str, key: str):
+    """What a fake Google API does for an unknown id."""
+    raise ValueError(f"Google API error 404: no {kind} {key}")

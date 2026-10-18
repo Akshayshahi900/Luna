@@ -121,12 +121,17 @@ inside one can resume; each call still starts with only `[system, task]`.
 
 Default assistant backend: `servers/tasks_mcp_server.py` — `list_tasks`,
 `add_task(title, due?, notes?)`, `set_task_done(task_id, done)`,
-`delete_task(task_id)`, stored in `data/tasks.json` (`LUNA_TASKS_PATH`).
-All but `list_tasks` ask for approval.
+`delete_task(task_id)`, `add_task_from_email(uid, …)`, stored in
+`data/tasks.json` (`LUNA_TASKS_PATH`) and two-way synced with Google Tasks
+when signed in (spec7). All but `list_tasks` ask for approval.
 
-Mail backend (spec6): `servers/mail_mcp_server.py`, also tagged `assistant` —
-`list_inbox`, `search_emails`, `read_email`, and `send_email` /
-`reply_to_email`, which ask for approval.
+Mail backend (spec6, Gmail API per spec7): `servers/mail_mcp_server.py`, also
+tagged `assistant` — `list_inbox`, `search_emails`, `read_email`, and
+`send_email` / `reply_to_email`, which ask for approval.
+
+Calendar backend (spec7): `servers/google_mcp_server.py`, also tagged `assistant` —
+`list_events`, `get_agenda`, `create_event`, `update_event`, `delete_event`,
+`create_event_from_email`. Changes ask for approval.
 
 Each group loads separately; a broken server only drops its own group.
 
@@ -140,6 +145,9 @@ Each group loads separately; a broken server only drops its own group.
 | `LUNA_AUTO_APPROVE` | empty | Comma-separated tools that skip approval |
 | `LUNA_TASKS_PATH` | `./data/tasks.json` | To-do file for the tasks MCP server |
 | `LUNA_MAIL_*` | unset | Mail MCP server account (spec6, `docs/mail.md`) |
+| `LUNA_GOOGLE_*` | `data/google/…` | Google sign-in files, calendar, task list to sync (spec7, `docs/google.md`) |
+| `LUNA_TASKS_GOOGLE_SYNC` | `true` | Sync `data/tasks.json` with Google Tasks when signed in (spec7) |
+| `LUNA_MAIL_BACKEND` | `gmail` | `gmail` (Gmail API) or `imap` (spec7) |
 
 ## 8. Verification
 

@@ -318,3 +318,42 @@ assistant prompt says to treat it as data. Ruled out: a mail-specific
 approval path (the generic one already fits) and failing at startup when
 mail isn't configured (that would drop the tasks tools in the same group).
 
+
+## D32 — One Google sign-in: Gmail API mail, Calendar, and local to-dos two-way synced with Google Tasks (2026-10-18, spec7)
+`luna/integrations/google.py` holds one OAuth sign-in (Desktop client,
+`uv run luna-google-auth`, scopes `gmail.readonly`, `gmail.send`,
+`calendar.events`, `tasks`) used by three assistant MCP servers. Sign-in is
+a separate command because a stdio subprocess can't run a browser flow
+mid-conversation; servers only refresh the token, and a token missing a
+scope is refused so adding a scope later forces a fresh sign-in.
+
+- **Mail**: `servers/mail_mcp_server.py` gains a Gmail API backend, now the
+  default (`LUNA_MAIL_BACKEND=gmail|imap`). Same five tools and the same
+  reply guard; `gmail.readonly` makes "reading never marks read" a property
+  of the sign-in, replies keep their Gmail thread, and there is no app
+  password. IMAP stays for other providers (D31 still holds for it).
+- **Calendar**: `servers/google_mcp_server.py` (list, agenda, create, update,
+  delete, event from email).
+- **Tasks**: no separate Google Tasks tools. `data/tasks.json` stays the
+  source of truth and `servers/tasks_mcp_server.py` syncs it both ways with
+  one Google list on every tool call (new → insert, dirty → patch, changed in
+  Google → pull, both → newer wins, deletes mirrored, open Google tasks
+  imported). Chosen over two lists side by side (the model had to pick
+  one, and the phone and Luna disagreed) and over Google-only (no offline,
+  no account-free use). Whole-to-do last-writer-wins over field merging:
+  Tasks has one `updated` stamp, and conflicts on a personal list are rare.
+  Sync on each call over a background timer: stdio servers have no lifetime
+  of their own to hang a timer on, and one `list` request per call is cheap.
+  Google errors never fail a to-do tool; changes stay `dirty` until a later
+  sync.
+- **Mail sync**: `add_task_from_email` (tasks) and `create_event_from_email`
+  (google) import the mail server's `fetch_email` and read the email by
+  uid, rather than the model copying subject / sender between tools. The
+  Message-ID links the item (event private extended property, to-do notes
+  marker that also survives the trip through Google), so asking twice
+  returns the existing item.
+
+HITL needs no new code: every changing tool name has a risky verb (D9).
+Ruled out: a community Google Workspace MCP server (dozens of tools in the
+assistant's context, no to-do sync or mail link), and failing at startup
+when not signed in (would drop the other servers in the group, D31).

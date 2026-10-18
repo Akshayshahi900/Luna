@@ -19,11 +19,14 @@ dependencies = [
     "piper-tts>=1.8.0",
     "faster-whisper>=1.2.0",
     "numpy>=2.0",
+    "google-api-python-client>=2.201.0",
+    "google-auth-oauthlib>=1.5.0",
 ]
 
 [project.scripts]
 luna = "luna:main"
 luna-web = "luna.web:main"
+luna-google-auth = "luna.integrations.google:main"
 
 [build-system]
 requires = ["uv_build>=0.12.22,<0.13.0"]

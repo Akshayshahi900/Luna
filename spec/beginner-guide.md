@@ -67,7 +67,7 @@ Luna/
 │   └── mcp_servers.json      ← which MCP tool-servers to connect
 ├── servers/
 │   ├── demo_mcp_server.py    ← tiny example MCP server (2 tools)
-│   └── tasks_mcp_server.py   ← local to-dos for the assistant helper
+│   └── tasks_mcp_server.py   ← to-dos for the assistant (synced with Google Tasks)
 └── src/luna/                 ← the actual app
     ├── __init__.py           ← entry point → starts the chat CLI
     ├── cli/chat.py           ← the interactive chat loop (You> / Luna>)

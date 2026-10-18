@@ -40,6 +40,7 @@ DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
 DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
 DEFAULT_STT_DIR = PROJECT_ROOT / "data" / "models" / "whisper"
 DEFAULT_PERSONA_PATH = PROJECT_ROOT / "config" / "persona.md"
+DEFAULT_GOOGLE_DIR = PROJECT_ROOT / "data" / "google"
 
 
 class Settings(BaseSettings):
@@ -144,6 +145,14 @@ class Settings(BaseSettings):
             raise ValueError("response_style must be 'concise' or 'detailed'")
         return value
 
+    @field_validator("mail_backend")
+    @classmethod
+    def _known_mail_backend(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"gmail", "imap"}:
+            raise ValueError("mail_backend must be 'gmail' or 'imap'")
+        return value
+
     @field_validator("units")
     @classmethod
     def _known_units(cls, value: str) -> str:
@@ -237,6 +246,9 @@ class Settings(BaseSettings):
 
     # --- Mail (servers/mail_mcp_server.py, used by ask_assistant; docs/mail.md) ---
     # Read by the mail MCP server itself: stdio servers don't inherit Luna's env.
+    # gmail = Gmail API with the Google sign-in (luna-google-auth);
+    # imap = IMAP/SMTP with an app password (the LUNA_MAIL_* below).
+    mail_backend: str = Field(default="gmail", description="'gmail' or 'imap'")
     mail_address: str | None = Field(default=None, description="Your email address (sender of Luna's mail)")
     mail_password: str | None = Field(default=None, repr=False)  # an app password, not your login password
     mail_username: str | None = Field(default=None, description="IMAP/SMTP login if not the address")
@@ -247,6 +259,24 @@ class Settings(BaseSettings):
     mail_max_body_chars: int = Field(
         default=4000,
         description="Longer email bodies are cut before they reach the model",
+    )
+
+    # --- Google: Gmail, Calendar, Tasks sync (luna/integrations/google.py; docs/google.md) ---
+    # OAuth: the client file comes from Google Cloud Console; the token is written
+    # by `uv run luna-google-auth`. Both stay in data/ (git-ignored).
+    google_credentials_path: Path = Field(
+        default=DEFAULT_GOOGLE_DIR / "credentials.json",
+        description="OAuth client file (Desktop app) downloaded from Google Cloud",
+    )
+    google_token_path: Path = Field(
+        default=DEFAULT_GOOGLE_DIR / "token.json",
+        description="Saved Google sign-in (created by the auth command)",
+    )
+    google_calendar_id: str = Field(default="primary", description="Calendar the assistant uses")
+    google_tasklist_id: str = Field(default="@default", description="Google Tasks list the local to-dos sync with")
+    tasks_google_sync: bool = Field(
+        default=True,
+        description="Two-way sync of the local to-dos (LUNA_TASKS_PATH) with Google Tasks when signed in",
     )
 
     # --- Files / coding sandbox ---

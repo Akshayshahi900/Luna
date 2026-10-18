@@ -76,6 +76,9 @@ main agent ──ask_assistant──▶ assistant helper (HITL on send_email, re
 
 ## 7. Later
 
-OAuth (Gmail API / Microsoft Graph) for accounts without app passwords,
+Done in spec7: a Gmail API backend (OAuth, now the default; IMAP stays as
+`LUNA_MAIL_BACKEND=imap`).
+
+Still later: Microsoft Graph for accounts without app passwords,
 drafts, attachments when sending, marking read / archiving (would need
 `mark` / `archive` approval words), non-ASCII search (IMAP literals).
