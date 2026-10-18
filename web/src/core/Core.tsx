@@ -2,11 +2,12 @@
 // helper satellites and a particle field, all tinted by the current phase.
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer, Noise, Vignette } from "@react-three/postprocessing";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { BINS, live } from "../lib/audio";
 import { LOOKS, type Phase } from "../lib/theme";
 import { look } from "./look";
+import { createOrbit, drag, grab, release, step } from "./orbit";
 import { orbFragment, orbVertex } from "./shaders";
 
 const DEG = Math.PI / 180;
@@ -343,17 +344,63 @@ function Particles({ count = 1600 }) {
   return <points ref={ref} geometry={geometry} material={material} />;
 }
 
-/** Fits the core to the screen and tilts it gently toward the pointer. */
+/** Fits the core to the screen, spins it slowly, tilts it gently toward the
+ *  pointer, and lets you drag it round in 3D. */
 function Rig({ children }: { children: React.ReactNode }) {
   const ref = useRef<THREE.Group>(null);
-  const { viewport } = useThree();
+  const { viewport, gl } = useThree();
+  const orbit = useMemo(createOrbit, []);
+  const tilt = useRef({ x: 0, y: 0, weight: 1 });
   const scale = 0.82 * Math.min(1, viewport.width / 6.4, viewport.height / 6.6);
+
+  useEffect(() => {
+    const el = gl.domElement;
+    let last: { id: number; x: number; y: number } | null = null;
+    el.style.cursor = "grab";
+    el.style.touchAction = "none";
+    const down = (e: PointerEvent) => {
+      if (e.button !== 0 || last) return;
+      last = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = "grabbing";
+      grab(orbit);
+    };
+    const move = (e: PointerEvent) => {
+      if (!last || e.pointerId !== last.id) return;
+      drag(orbit, e.clientX - last.x, e.clientY - last.y);
+      last.x = e.clientX;
+      last.y = e.clientY;
+    };
+    const up = (e: PointerEvent) => {
+      if (!last || e.pointerId !== last.id) return;
+      last = null;
+      el.style.cursor = "grab";
+      release(orbit);
+    };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+    return () => {
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+  }, [gl, orbit]);
+
   useFrame((_, dt) => {
     const g = ref.current;
     if (!g) return;
+    step(orbit, dt);
+    const t = tilt.current;
     const k = 1 - Math.exp(-dt * 2);
-    g.rotation.y += (live.pointer.x * 0.25 - g.rotation.y) * k;
-    g.rotation.x += (-live.pointer.y * 0.18 - g.rotation.x) * k;
+    // The pointer tilt fades out while dragging so it doesn't fight the drag.
+    t.weight += ((orbit.dragging ? 0 : 1) - t.weight) * (1 - Math.exp(-dt * 6));
+    t.y += (live.pointer.x * 0.25 - t.y) * k;
+    t.x += (-live.pointer.y * 0.18 - t.x) * k;
+    g.rotation.x = orbit.x + t.x * t.weight;
+    g.rotation.y = orbit.y + t.y * t.weight;
   });
   return (
     <group ref={ref} scale={scale} position={[0, viewport.height * 0.06, 0]}>

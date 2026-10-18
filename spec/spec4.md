@@ -235,6 +235,21 @@ Visual style unchanged; the transcript drawer and approval card are untouched.
   - `web/src/lib/state.test.ts` and `time.test.ts`
 - Decision: D30.
 
+## 4g. Drag-to-rotate, slowly spinning core (added 2026-10-18)
+
+- The whole core (orb, rings, waveform, shockwaves, satellites) turns in
+  3D when dragged. Colors, voice sync and effects are unchanged: rotation
+  is applied to the `<Rig/>` group only.
+- `web/src/core/orbit.ts` (pure, tested in `orbit.test.ts`): drag right =
+  yaw right, drag down = top toward you; 0.008 rad/px; pitch clamped to
+  ±80°; release speed is the smoothed recent motion and decays at 3.5/s.
+- A constant yaw of 0.125 rad/s (one turn ≈ 50 s) runs whenever nobody is
+  dragging; a flick coasts on top of it and fades into it. Yaw is kept
+  within one turn. After 4 s idle only the pitch eases back to level.
+- Pointer events go to the canvas element with pointer capture
+  (`touch-action: none` for touch). The pointer tilt fades out while
+  dragging so the two don't fight.
+
 ## 5. Verification
 
 - `tests/test_web.py`: translator, pause description/answers, origin check,

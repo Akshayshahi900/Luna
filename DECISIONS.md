@@ -560,3 +560,22 @@ Ruled out:
 - **Auto-approving from Telegram,** or a separate allow-list of tools for
   it. Approvals already work there, and one `LUNA_AUTO_APPROVE` is
   easier to reason about.
+
+## D40 — The core spins slowly and can be dragged round in 3D (2026-10-18, spec4 §4g)
+The core was already a three.js scene but only tilted a little toward the
+pointer. Now it turns slowly on its own and you can drag it to spin it.
+- **Rotate the whole Rig, not just the orb.** The orb alone is a noisy
+  sphere, so spinning it barely shows. Turning the rings, waveform and
+  shockwaves with it is what makes it read as 3D. Materials, shaders and
+  audio mapping are untouched, so colors, voice sync and effects match.
+- **Yaw/pitch, pitch clamped to ±80°,** instead of a free trackball: it
+  never ends up upside down and the controls stay predictable.
+- **Constant slow yaw (one turn ≈ 50 s), paused while held.** A flick
+  coasts on top of it and fades back into it. This replaced an earlier
+  "return to face-on after 4 s" rule on request: a spinning core can't
+  also park face-on. The HUD rings are briefly edge-on twice per turn;
+  that's accepted. After 4 s idle only the pitch levels out, so it keeps
+  spinning upright.
+- **Own small module (`core/orbit.ts`), not drei's OrbitControls:** that
+  would move the camera (and so the particle field and bloom framing)
+  and add a dependency for ~80 lines of math.

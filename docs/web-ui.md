@@ -71,6 +71,7 @@ in the dock for hands-free use.
 | Approve a risky action | say "approve" / "yes, go ahead", or "deny" / "no"; or click AUTHORIZE / MODIFY / DENY |
 | Steer instead of approving | "no, call it notes.md instead": the reason goes back to Luna |
 | Answer a question | just say (or type) the answer |
+| Spin the core | it turns slowly on its own (one turn ≈ 50 s). Drag it with the mouse (or a finger) to rotate it; flick it to let it coast. The tilt levels out a few seconds after you let go. |
 
 Core colors: cyan = standing by, bright cyan = listening, violet =
 processing, pale cyan = speaking, amber = waiting for your approval,
