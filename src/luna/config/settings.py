@@ -36,6 +36,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MCP_CONFIG = PROJECT_ROOT / "config" / "mcp_servers.json"
 DEFAULT_CHECKPOINT_PATH = PROJECT_ROOT / "data" / "luna_memory.sqlite"
 DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
+DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
 
 
 class Settings(BaseSettings):
@@ -56,12 +57,32 @@ class Settings(BaseSettings):
     )
 
     # --- LLM (the brain) ---
+    # Which API serves the model at startup; the web UI can switch later.
+    # All three speak the OpenAI API (see luna/agent/providers.py).
+    provider: str = Field(
+        default="openrouter",
+        description="'openrouter', 'groq' or 'ollama'",
+    )
     model_name: str = Field(
         default="nvidia/nemotron-3-ultra-550b-a55b",
         description="OpenRouter model slug",
     )
     # Loaded from LUNA_OPENROUTER_API_KEY in the project-root .env file.
     openrouter_api_key: str | None = Field(default=None, repr=False)
+    # Groq (https://console.groq.com/keys)
+    groq_api_key: str | None = Field(default=None, repr=False)
+    groq_model: str = Field(default="llama-3.3-70b-versatile", description="Groq model id")
+    # Ollama (local, no key). Its OpenAI-compatible endpoint ends in /v1.
+    ollama_base_url: str = Field(default="http://localhost:11434/v1", description="Ollama /v1 URL")
+    ollama_model: str = Field(default="qwen3:8b", description="Ollama model tag (must support tools)")
+
+    @field_validator("provider")
+    @classmethod
+    def _known_provider(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"openrouter", "groq", "ollama"}:
+            raise ValueError("provider must be 'openrouter', 'groq' or 'ollama'")
+        return value
     system_prompt: str = Field(
         default=(
             "You are Luna, a helpful assistant. "
@@ -167,6 +188,50 @@ class Settings(BaseSettings):
         default="default",
         description="Conversation id used when you first start the CLI",
     )
+
+    # --- Web UI (luna-web) ---
+    web_host: str = Field(
+        default="127.0.0.1",
+        description="Address the web server listens on (keep it local: it can run tools)",
+    )
+    web_port: int = Field(default=8765, description="Port for the web server")
+    web_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"],
+        description=(
+            "Comma-separated browser origins allowed to open the WebSocket, besides "
+            "the server's own address. Default = the Vite dev server."
+        ),
+    )
+
+    # --- Voice output (web UI) ---
+    tts_engine: str = Field(
+        default="piper",
+        description="'piper' (local neural voice, core follows the real audio) or 'browser'",
+    )
+    tts_voice: str = Field(
+        default="en_US-lessac-medium",
+        description="Piper voice name, downloaded once into tts_voices_dir",
+    )
+    tts_voices_dir: Path = Field(default=DEFAULT_VOICES_DIR, description="Where Piper voices are kept")
+    tts_length_scale: float = Field(
+        default=0.95,
+        description="Piper speaking pace: < 1 faster, > 1 slower",
+    )
+
+    @field_validator("tts_engine")
+    @classmethod
+    def _known_tts(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"piper", "browser"}:
+            raise ValueError("tts_engine must be 'piper' or 'browser'")
+        return value
+
+    @field_validator("web_allowed_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip().rstrip("/") for part in value.split(",") if part.strip()]
+        return value
 
 
 @lru_cache

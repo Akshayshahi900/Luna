@@ -7,7 +7,7 @@ This is the "factory". It does not chat with you. It builds the object
 that *can* chat.
 
 Analogy:
-  - Model      = brain (OpenRouter)
+  - Model      = brain (OpenRouter, Groq or Ollama — see providers.py)
   - Tools      = hands (calculator, MCP tools, ...)
   - Checkpointer = notebook (remembers the conversation)
   - create_agent = wires brain + hands + notebook into one runnable graph
@@ -30,10 +30,10 @@ from langchain.agents.middleware import (
     TodoListMiddleware,
     ToolCallLimitMiddleware,
 )
-from langchain_openai import ChatOpenAI
 
 from luna.agent.budget import TaskBudgetMiddleware
 from luna.agent.memory import create_checkpointer
+from luna.agent.providers import make_model
 from luna.agent.scratchpad import ScratchpadMiddleware
 from luna.agent.subagents import get_subagent_specs, make_delegate_tool, needs_approval
 from luna.config import Settings, get_settings
@@ -172,14 +172,9 @@ async def build_agent(
     """
     settings = settings or get_settings()
 
-    # 1) Brain — talks to OpenRouter's OpenAI-compatible API.
-    if not settings.openrouter_api_key:
-        raise ValueError("Set LUNA_OPENROUTER_API_KEY in your .env file to use OpenRouter.")
-    model = ChatOpenAI(
-        model=settings.model_name,
-        base_url="https://openrouter.ai/api/v1",
-        api_key=settings.openrouter_api_key,
-    )
+    # 1) Brain — an OpenAI-compatible chat model from the configured
+    # provider (OpenRouter, Groq or Ollama; see luna/agent/providers.py).
+    model = make_model(settings)
 
     # 2) Notebook — stores message history per thread_id.
     # Must be async (AsyncSqliteSaver) because the CLI uses agent.astream().
@@ -188,12 +183,28 @@ async def build_agent(
         path=settings.checkpoint_path,
     )
 
-    # 3) Hands — all callable tools, plus one delegate tool per subagent.
+    # 3) Hands (part 1) — MCP tools are loaded once and split: untagged →
+    # main agent, tagged → that subagent (see "agent" in config/mcp_servers.json).
+    mcp_groups = await load_mcp_groups(settings)
+
+    return await assemble_agent(settings, model, checkpointer, mcp_groups)
+
+
+async def assemble_agent(
+    settings: Settings,
+    model: Any,
+    checkpointer: Any,
+    mcp_groups: dict[str | None, list[Any]],
+) -> tuple[Any, ToolRegistry]:
+    """Wire an agent from parts that already exist.
+
+    Cheap (no network, no files), so the web UI calls it again with a new
+    ``model`` to switch providers: same memory, same MCP connections, and
+    every helper and the summarizer switch along with the main agent.
+    """
+    # 3) Hands (part 2) — all callable tools, plus one delegate tool per subagent.
     # Delegates are ordinary tools, so the model chooses between "do it
     # myself" and "hand it off" the same way it picks any other tool.
-    # MCP tools are loaded once and split: untagged → main agent, tagged →
-    # that subagent (see "agent" in config/mcp_servers.json).
-    mcp_groups = await load_mcp_groups(settings)
     registry = await build_tool_registry(settings, mcp_groups)
     registry.register_many(
         [make_delegate_tool(spec, model) for spec in get_subagent_specs(settings, mcp_groups)]
@@ -218,6 +229,7 @@ async def build_agent(
 
 
 __all__ = [
+    "assemble_agent",
     "build_agent",
     "build_middleware",
     "build_tool_registry",

@@ -2,13 +2,17 @@
 
 Luna is a general assistant: one main ReAct agent that does quick work
 itself and hands bigger jobs to helper subagents. Design history is in
-`spec/` (spec1 → spec3); decisions and their reasons in `DECISIONS.md`.
+`spec/` (spec1 → spec4); decisions and their reasons in `DECISIONS.md`.
+Two front doors share the same agent code: the terminal CLI and a
+voice-first web UI (`docs/web-ui.md`).
 
 ## Topology
 
 ```
                          ┌────────────────────────────────────────────┐
  you ── CLI (cli/chat) ──▶ run_turn → run_task (agent/runner)          │
+ you ── browser (web/) ──▶ /ws → Session (web/server) → run_task       │
+        voice in/out,     │   events → JSON (web/events)                │
    ▲     approve/edit/    │   TaskBudget for the whole message          │
    │     reject, answers  └──────────────────┬─────────────────────────┘
    │                                         ▼
@@ -47,14 +51,25 @@ itself and hands bigger jobs to helper subagents. Design history is in
 7. The checkpointer has saved messages, scratchpad and any paused helper
    state under the thread id; old messages get summarized past 12k tokens.
 
+The web path is the same loop split over socket messages: `message` →
+steps 1–5, the pauses go to the browser as `pause`, and `resume` is step 6.
+Protocol: `docs/web-ui.md`.
+
 ## Files
 
 ```
 src/luna/
   cli/chat.py              REPL, printing, pause handling (run_turn, answer_interrupt)
+  voice/tts.py             PiperTTS: local text-to-speech for the web UI (/api/tts)
+  web/
+    server.py              luna-web: Starlette app, AgentHost (model switch), /ws Session,
+                           origin check, serves web/dist
+    events.py              stream events → JSON; pause describe / answer conversion
   config/settings.py       all LUNA_* settings
   agent/
-    builder.py             build_agent: model, checkpointer, tools, middleware, delegates
+    builder.py             build_agent (model, checkpointer, MCP) → assemble_agent (tools,
+                           middleware, delegates); assemble again = switch model
+    providers.py           OpenRouter / Groq / Ollama → ChatOpenAI; list models
     runner.py              run_task: one run with budget + event stream + pending pauses
     budget.py              TaskBudget + TaskBudgetMiddleware
     scratchpad.py          notes state, write_note, ScratchpadMiddleware
@@ -76,9 +91,14 @@ src/luna/
 config/mcp_servers.json    MCP servers (empty by default; see .example.json)
 servers/demo_mcp_server.py sample MCP server
 tests/                     pytest suite (fake models, no API key)
+web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
+  src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
+  src/core (3D core), src/components (HUD, drawer, pause card)
+docs/web-ui.md             running the web UI, WebSocket protocol
 spec/                      design specs; DECISIONS.md; this file
 ```
 
 ## Not built yet
 
-Long-term memory across threads (spec3 §9), an HTTP API, and a web UI.
+Long-term memory across threads (spec3 §9), local speech input (STT),
+a wake word, and cancelling a running task from the UI.

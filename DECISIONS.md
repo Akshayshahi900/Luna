@@ -88,3 +88,59 @@ Fix: the files description and prompt say it cannot execute and point to
 `ask_coder`; the coder says to use it whenever something must run. Rule
 for future helpers: when two helpers can touch the same thing, each
 description must say what it is *not* for.
+
+## D15 — The web UI talks to the agent over one WebSocket (2026-10-18, spec4)
+`luna-web` (Starlette + uvicorn) keeps one `Session` per socket that does
+what the CLI's `run_turn` does, split across messages: `message` starts a
+task, `resume` answers pauses with the same budget. Events stream as small
+JSON dicts (`luna/web/events.py`), and pause answers are converted to the
+CLI's exact formats, so the agent code is unchanged. Starlette rather than
+FastAPI: one socket and two routes don't need request models, and it was
+already installed through `mcp`. Rules out: a REST/SSE API (pauses need
+two-way traffic), cancelling a run mid-tool (would leave an unanswered
+tool call in the thread).
+
+## D16 — Frontend is a Vite + React SPA, not Next.js (2026-10-18, spec4)
+Everything the UI needs runs in the browser (WebGL, mic, speech APIs, a
+WebSocket); Next.js's server rendering, routing and API routes would go
+unused, and its server would be a second backend next to Python. Vite +
+React has the same libraries (React Three Fiber, postprocessing, Motion),
+builds to static files that `luna-web` serves itself, and proxies the
+socket in dev. Lives in `web/`.
+
+## D17 — Voice uses the browser's speech APIs for now (2026-10-18, spec4)
+SpeechRecognition + speechSynthesis need no extra service or model, and
+the UI is built so they can be swapped. Cost: voice input works in Chrome
+and Edge only (audio goes to Google), and synthesized speech gives no
+audio data, so the core's "speaking" waveform is synthesized from word
+boundaries. A local STT/TTS endpoint is the planned replacement.
+
+## D18 — The socket checks Origin; the server binds to localhost (2026-10-18, spec4)
+The agent can write files and, after approval, run commands, and the
+approval itself arrives over the same socket. Any web page could try to
+open `ws://127.0.0.1:8765`, so only the server's own origin and
+`LUNA_WEB_ALLOWED_ORIGINS` (default: the Vite dev server) are accepted.
+Non-browser clients (no Origin header) are allowed: they already run on
+this machine.
+
+## D19 — Switching models rebuilds the agent around the same memory and tools (2026-10-18, spec4 §4a)
+OpenRouter, Groq and Ollama all expose the OpenAI API, so one `ChatOpenAI`
+covers them (`luna/agent/providers.py`, no new dependency). To switch at
+runtime the web server re-runs the cheap part of `build_agent`
+(`assemble_agent`) with a new model and keeps the checkpointer and MCP
+connections. Chosen over swapping the model inside middleware, because the
+model is also baked into every helper subagent and the summarizer; a
+rebuild switches all of them at once. The choice is server-wide (one
+agent per server) and not persisted: `LUNA_PROVIDER` sets the startup one.
+
+## D20 — Luna speaks with Piper on the server so the core can follow the real audio (2026-10-18, spec4 §4b)
+Partly supersedes D17 (output only; input is still the browser's). Browser
+speechSynthesis exposes no audio, so the core could only guess. Piper was
+chosen over Kokoro (more natural but ~330 MB and slow on CPU) and Edge TTS
+(cloud, unofficial endpoint) because it is local, fast on CPU (~14×
+real time), small (~60 MB voice) and has wheels for Windows, macOS and
+Linux. Sentences are synthesized one by one and prefetched, so speech
+starts after the first sentence instead of the whole reply. The browser
+voice stays as the fallback (`LUNA_TTS_ENGINE=browser`, or Piper failing).
+Band levels are normalized to their own recent peak instead of fixed
+thresholds, which pinned at 1 when measured. Cost: `piper-tts` is GPL-3.0.

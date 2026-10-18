@@ -12,6 +12,7 @@ from langgraph.types import Command, Interrupt
 from luna.agent.budget import TaskBudget
 from luna.agent.builder import build_agent, recursion_limit
 from luna.agent.memory import close_checkpointers
+from luna.agent.providers import get_provider
 from luna.agent.runner import run_task
 from luna.config import Settings, get_settings
 
@@ -205,7 +206,7 @@ async def run_chat(thread_id: str | None = None) -> None:
 
     print("Luna — LangGraph chatbot")
     print(
-        f"Model: {settings.model_name}  |  "
+        f"Model: {settings.provider}/{get_provider(settings.provider).default_model(settings)}  |  "
         f"Memory: {settings.memory_backend}  |  "
         f"Thread: {thread_id}"
     )
