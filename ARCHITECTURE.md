@@ -25,7 +25,7 @@ voice-first web UI (`docs/web-ui.md`).
    │        └───────┬──────────────┬──────────────┬──────────────┬─────────────┘
    │                ▼              ▼              ▼              ▼
    │         ask_researcher    ask_files       ask_coder     ask_assistant
-   │         (Tavily)          (fs tools)      (fs + shell)  (tagged MCP: to-dos)
+   │         (Tavily)          (fs tools)      (fs + shell)  (tagged MCP: to-dos, mail)
    │         each: own ReAct loop, limit + timeout, TaskBudget, optional HITL,
    │               fresh context per call, shares the main checkpointer
    │                │              │              │              │
@@ -117,16 +117,19 @@ src/luna/
     limits.py              cap_output
     registry.py            ToolRegistry
   mcp/loader.py            read MCP config, split_by_agent, is_risky_tool_name
-config/mcp_servers.json    MCP servers: demo (main), tasks (assistant), LangChain docs (researcher)
+config/mcp_servers.json    MCP servers: demo (main), tasks + mail (assistant), LangChain docs (researcher)
 config/persona.md          optional extra instructions for Luna (git-ignored; see persona.example.md)
 servers/demo_mcp_server.py sample MCP server
 servers/tasks_mcp_server.py local to-dos (data/tasks.json) for ask_assistant
+servers/mail_mcp_server.py  inbox read + send / reply over IMAP/SMTP for ask_assistant
+                           (sending asks for approval; docs/mail.md)
 tests/                     pytest suite (fake models, no API key)
 web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
   src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
   src/core (3D core), src/components (HUD, drawer, pause card, memory panel)
 docs/web-ui.md             running the web UI, WebSocket protocol
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
+docs/mail.md               mail setup, tools, approval
 spec/                      design specs; DECISIONS.md; this file
 ```
 

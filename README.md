@@ -2,7 +2,7 @@
 
 A general assistant on LangGraph: one main agent that does quick work
 itself and hands bigger jobs to helper agents — **researcher** (web),
-**files**, **coder** and **assistant** (local to-dos by default; calendar / mail via MCP). Risky
+**files**, **coder** and **assistant** (local to-dos and email via MCP; calendar via MCP). Risky
 actions (writing files, running commands, sending things) ask you first.
 
 ## Quick start
@@ -16,6 +16,7 @@ cp .env.example .env
 # Replace `your_openrouter_api_key_here` with your key in .env
 
 # 3. Optional: web research — add LUNA_TAVILY_API_KEY (https://app.tavily.com)
+#    Optional: email — add LUNA_MAIL_ADDRESS + LUNA_MAIL_PASSWORD (docs/mail.md)
 
 # 4. Chat
 uv run luna              # always a new session

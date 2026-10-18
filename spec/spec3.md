@@ -124,6 +124,10 @@ Default assistant backend: `servers/tasks_mcp_server.py` — `list_tasks`,
 `delete_task(task_id)`, stored in `data/tasks.json` (`LUNA_TASKS_PATH`).
 All but `list_tasks` ask for approval.
 
+Mail backend (spec6): `servers/mail_mcp_server.py`, also tagged `assistant` —
+`list_inbox`, `search_emails`, `read_email`, and `send_email` /
+`reply_to_email`, which ask for approval.
+
 Each group loads separately; a broken server only drops its own group.
 
 ## 7. Configuration added
@@ -135,6 +139,7 @@ Each group loads separately; a broken server only drops its own group.
 | `LUNA_WORKSPACE_DIRS` | `./workspace` | Comma-separated folders for files/coder |
 | `LUNA_AUTO_APPROVE` | empty | Comma-separated tools that skip approval |
 | `LUNA_TASKS_PATH` | `./data/tasks.json` | To-do file for the tasks MCP server |
+| `LUNA_MAIL_*` | unset | Mail MCP server account (spec6, `docs/mail.md`) |
 
 ## 8. Verification
 

@@ -300,3 +300,21 @@ Ruled out:
 Cost: listing reads every checkpoint, which is fine for a personal
 assistant's few hundred threads.
 
+## D31 — Mail is a local IMAP/SMTP MCP server; sending is gated by the existing approval rule (2026-10-18, spec6)
+`servers/mail_mcp_server.py` gives the assistant `list_inbox`,
+`search_emails`, `read_email`, `send_email` and `reply_to_email`, tagged
+`"agent": "assistant"` like the tasks server (D12). IMAP/SMTP with an app
+password over the Gmail API / Graph: standard library only, any provider,
+no OAuth consent screen or token refresh to own. HITL needs no new code:
+`send` and `reply` are already risky verbs, so both pause for approve /
+edit / reject (D9). Two guards make the approval meaningful:
+`reply_to_email` takes its recipients explicitly (the approval shows them),
+and the server refuses anyone not on the original email. Reading opens
+folders read-only with `BODY.PEEK`, so Luna never marks mail as read. The
+server reads credentials from `Settings` (project `.env`), because stdio
+MCP servers inherit only PATH/HOME-like variables, and secrets in
+`mcp_servers.json` could get committed. Email text is untrusted: the
+assistant prompt says to treat it as data. Ruled out: a mail-specific
+approval path (the generic one already fits) and failing at startup when
+mail isn't configured (that would drop the tasks tools in the same group).
+

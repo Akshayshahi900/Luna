@@ -235,6 +235,20 @@ class Settings(BaseSettings):
         description="Connect to MCP servers from mcp_servers.json",
     )
 
+    # --- Mail (servers/mail_mcp_server.py, used by ask_assistant; docs/mail.md) ---
+    # Read by the mail MCP server itself: stdio servers don't inherit Luna's env.
+    mail_address: str | None = Field(default=None, description="Your email address (sender of Luna's mail)")
+    mail_password: str | None = Field(default=None, repr=False)  # an app password, not your login password
+    mail_username: str | None = Field(default=None, description="IMAP/SMTP login if not the address")
+    mail_imap_host: str = Field(default="imap.gmail.com", description="IMAP server (reading)")
+    mail_imap_port: int = Field(default=993, description="IMAP over SSL port")
+    mail_smtp_host: str = Field(default="smtp.gmail.com", description="SMTP server (sending)")
+    mail_smtp_port: int = Field(default=465, description="465 = SSL, anything else = STARTTLS (e.g. 587)")
+    mail_max_body_chars: int = Field(
+        default=4000,
+        description="Longer email bodies are cut before they reach the model",
+    )
+
     # --- Files / coding sandbox ---
     # NoDecode: read these as plain comma-separated text, not JSON lists.
     workspace_dirs: Annotated[list[Path], NoDecode] = Field(
