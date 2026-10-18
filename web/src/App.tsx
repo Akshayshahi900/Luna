@@ -10,11 +10,17 @@
 //    hands-free just means "listen again after each reply".
 // Short commands (stop, cancel, switch to Groq, new conversation, sleep…)
 // are handled here; everything else goes to Luna.
+//
+// Control Center: #/control[/<app>] (gear button, S key) opens the OS-style
+// settings layer over the HUD; the socket stays connected underneath.
+// Routine results ({"type": "routine_result"}) refresh the HUD widgets.
 import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boot } from "./components/Boot";
 import { Captions } from "./components/Captions";
 import { ChatDrawer } from "./components/ChatDrawer";
+import { APP_IDS, type AppId, ControlCenter } from "./components/control/ControlCenter";
+import { InsightWidgets } from "./components/InsightWidgets";
 import { CommandLine } from "./components/CommandLine";
 import { Dock } from "./components/Dock";
 import { MemoryPanel } from "./components/MemoryPanel";
@@ -23,6 +29,7 @@ import { ActivityFeed, Frame, SystemPanel, TopBar } from "./components/Hud";
 import { PauseCard } from "./components/PauseCard";
 import { Core } from "./core/Core";
 import { decayLive, live, MicMeter, setLive, sfx, sounds } from "./lib/audio";
+import { api, type DashboardPrefs, type Insights } from "./lib/control";
 import { isEcho, parseApproval, parseVoiceCommand, parseWake } from "./lib/intent";
 import type { Pause, PauseReply, ServerEvent } from "./lib/protocol";
 import { Listener, SentenceChunker, Speaker } from "./lib/speech";
@@ -66,6 +73,13 @@ function pausePrompt(pause: Pause): string {
 
 const PROVIDER_NAMES = { openrouter: "OpenRouter", groq: "Groq", ollama: "Ollama" } as const;
 
+/** "#/control/models" → "models"; null when the Control Center is closed. */
+function controlRoute(hash: string): AppId | null {
+  const m = /^#\/control(?:\/([a-z]+))?/.exec(hash);
+  if (!m) return null;
+  return APP_IDS.includes(m[1] as AppId) ? (m[1] as AppId) : "overview";
+}
+
 export default function App() {
   const [booted, setBooted] = useState(false);
   const [listening, setListening] = useState(false);
@@ -81,6 +95,10 @@ export default function App() {
   const [switcher, setSwitcher] = useState(false);
   const [fault, setFault] = useState(false);
   const [replies, setReplies] = useState<Record<string, PauseReply>>({});
+  const [controlApp, setControlApp] = useState<AppId | null>(() => controlRoute(location.hash));
+  const [controlSignal, setControlSignal] = useState(0);
+  const [prefs, setPrefs] = useState<DashboardPrefs | null>(null);
+  const [insights, setInsights] = useState<Insights["insights"]>({});
 
   const speaker = useMemo(() => new Speaker(), []);
   const listener = useMemo(() => new Listener(), []);
@@ -97,7 +115,7 @@ export default function App() {
   const oneShotTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const wantReply = useRef(false); // listen once Luna finishes this prompt
   const spoken = useRef<{ text: string; at: number }[]>([]);
-  const flags = useRef({ handsFree, booted, whisper: false });
+  const flags = useRef({ handsFree, booted, whisper: false, control: false });
 
   const onEventRef = useRef<(e: ServerEvent) => void>(() => {});
   const { state, send, sendMessage, answer, setModel } = useLuna((e) => onEventRef.current(e));
@@ -105,7 +123,7 @@ export default function App() {
   stateRef.current = state;
   const whisper = state.stt === "whisper";
   const voiceIn = whisper || Listener.supported;
-  flags.current = { handsFree, booted, whisper };
+  flags.current = { handsFree, booted, whisper, control: controlApp !== null };
 
   /** Speak, remembering the words for the echo check. */
   const say = useCallback(
@@ -216,6 +234,14 @@ export default function App() {
     } else if (event.type === "model" && stateRef.current.switching) {
       sounds.done();
       say(`Neural link switched to ${PROVIDER_NAMES[event.provider as keyof typeof PROVIDER_NAMES] ?? event.provider}.`);
+    } else if (event.type === "routine_result") {
+      const key = event.routine.builtin;
+      if (key && event.run.status === "ok") setInsights((i) => ({ ...i, [key]: event.run }));
+      setControlSignal((n) => n + 1);
+    } else if (event.type === "settings_changed") {
+      setControlSignal((n) => n + 1);
+    } else if (event.type === "dashboard") {
+      setPrefs(event.prefs);
     } else if (event.type === "error") {
       chunker.flush();
       sounds.error();
@@ -223,6 +249,34 @@ export default function App() {
       setTimeout(() => setFault(false), 4000);
     }
   };
+
+  // --- control center ----------------------------------------------------
+
+  // The hash is the source of truth, so Back closes it and links work.
+  useEffect(() => {
+    const onHash = () => setControlApp(controlRoute(location.hash));
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, []);
+  const openControl = useCallback((app: AppId = "overview") => {
+    location.hash = `#/control/${app}`;
+  }, []);
+  const closeControl = useCallback(() => {
+    history.pushState(null, "", location.pathname + location.search);
+    setControlApp(null);
+  }, []);
+
+  // Widget data and preferences: on connect, then pushed over the socket.
+  useEffect(() => {
+    if (!state.connected) return;
+    api.insights().then(
+      (r) => {
+        setInsights(r.insights);
+        setPrefs(r.dashboard);
+      },
+      () => undefined, // older server without the Control API: no widgets
+    );
+  }, [state.connected]);
 
   // --- pauses ------------------------------------------------------------
 
@@ -463,9 +517,9 @@ export default function App() {
   // Esc stops a running task (STOP), otherwise hushes Luna and closes panels.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!flags.current.booted) return;
+      if (!flags.current.booted || flags.current.control) return; // the Control Center has its own keys
       const target = e.target as HTMLElement;
-      if (target.closest("input, textarea, [contenteditable]")) return;
+      if (target.closest("input, textarea, select, [contenteditable]")) return;
       if (e.code === "Space") {
         e.preventDefault();
         if (listener.active || oneShot.current) stopListening();
@@ -479,6 +533,8 @@ export default function App() {
         toggleMemory();
       } else if (e.key.toLowerCase() === "m") {
         setSwitcher((v) => !v);
+      } else if (e.key.toLowerCase() === "s" && !e.ctrlKey && !e.metaKey) {
+        openControl();
       } else if (e.key === "Escape" && stateRef.current.busy) {
         // A run is in progress: stop it (and its helpers). Approvals and
         // questions are not "running"; Esc keeps its old meaning for them.
@@ -499,7 +555,7 @@ export default function App() {
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [listener, speaker, voice, send, startListening, stopListening, endOneShot, endFollow, toggleDrawer, toggleMemory]);
+  }, [listener, speaker, voice, send, startListening, stopListening, endOneShot, endFollow, toggleDrawer, toggleMemory, openControl]);
 
   const engage = () => {
     speaker.unlock(); // inside the click: browsers only allow audio after a gesture
@@ -612,7 +668,10 @@ export default function App() {
             memory={state.memoryOn}
             inbox={state.inbox}
             onMemory={toggleMemory}
+            onSettings={() => openControl()}
           />
+
+          <InsightWidgets prefs={prefs} insights={insights} onOpen={openControl} hidden={drawer || memoryOpen} />
 
           <MemoryPanel open={memoryOpen} state={state} send={send} onClose={() => setMemoryOpen(false)} />
 
@@ -631,12 +690,23 @@ export default function App() {
             onDeleteSession={(id) => send({ type: "delete_session", id })}
           />
 
-          <div className="hint">
+          <div className={`hint ${prefs && !prefs.show_hints ? "hidden" : ""}`}>
             {whisper && handsFree ? "“HEY LUNA” · TALK" : voiceIn ? "SPACE · TALK" : "VOICE INPUT NEEDS CHROME / EDGE"} &nbsp;/&nbsp; / · TYPE
-            &nbsp;/&nbsp; T · LOG {state.memoryOn && <>&nbsp;/&nbsp; K · MEMORY </>}&nbsp;/&nbsp; M · MODEL &nbsp;/&nbsp; ESC · {state.busy ? "STOP" : "HUSH"}
+            &nbsp;/&nbsp; T · LOG {state.memoryOn && <>&nbsp;/&nbsp; K · MEMORY </>}&nbsp;/&nbsp; M · MODEL &nbsp;/&nbsp; S · SETTINGS &nbsp;/&nbsp; ESC · {state.busy ? "STOP" : "HUSH"}
           </div>
         </>
       )}
+
+      <ControlCenter
+        open={controlApp !== null}
+        app={controlApp ?? "overview"}
+        onApp={openControl}
+        onClose={closeControl}
+        connected={state.connected}
+        signal={controlSignal}
+        prefs={prefs}
+        onPrefs={setPrefs}
+      />
     </div>
   );
 }

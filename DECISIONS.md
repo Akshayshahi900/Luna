@@ -369,3 +369,75 @@ uses the fake chat model. Security reports go through private advisories,
 since the agent can run commands and act on the user's Google account.
 Ruled out: a copyleft licence (friction for people embedding the agent) and
 CI that calls a real LLM (costs free-tier limits, needs secrets in forks).
+
+## D34 — Control Center: settings are edited in the browser and written to `.env` in place (2026-10-18, spec8)
+The web UI gets an OS-style Control Center (`#/control`, gear button, `S`)
+for every setting, MCP connectors, sign-ins, permissions, dashboard
+preferences, routines and live stats. Its JSON API is under
+`/api/control/` (`web/control.py`), behind the same Origin check as `/ws`.
+
+- **Storage:** `.env` stays the only settings file. `config/envfile.py`
+  edits it in place: only the changed keys' lines are rewritten, comments
+  and order are kept, new keys go at the end. The write is a temp file +
+  rename. A new file gets mode 0600.
+- **Validation:** `config/schema.py` re-reads the file with `Settings()`.
+  A value it rejects puts the original bytes back (HTTP 400), so the UI can
+  never leave Luna unable to start.
+- **Secrets** (API keys, mail password) are write-only: the browser only
+  learns whether one is set.
+- **When a change takes effect** is shown per field:
+  - "live": the mail / Google servers read `.env` on every call;
+  - "rebuild": `AgentHost.reconfigure` rebuilds the agent right away with
+    the same memory and MCP connections (D19's mechanism);
+  - "restart": storage paths, web server, voice, MCP config. These show a
+    banner until luna-web restarts.
+- **Only saved fields change in the running server.** The host's settings
+  take just the saved fields (`model_copy(update=…)`), so values passed in
+  code (tests) are not replaced by a full re-read.
+- **Model choice is saved now.** "Save default" writes `LUNA_PROVIDER` +
+  the provider's model key. D19's live switch stays for the HUD popover.
+- **MCP servers** are edited in `config/mcp_servers.json`; `"disabled": true`
+  keeps an entry without loading it (`mcp/loader.py`). Env values of a
+  server are never sent to the browser, only their names.
+
+Ruled out:
+- A separate overrides JSON layered over `.env`. Two sources of truth, and
+  the CLI would need to read it too. The user chose `.env`.
+- python-dotenv's `set_key`. It re-quotes every value and has no way to
+  roll back.
+- Writing `.env` from the CLI. Not needed yet.
+
+## D35 — Routines: an in-process scheduler inside luna-web (2026-10-18, spec8)
+Scheduled jobs live in `luna/routines/`. Their definitions, run history
+and per-day API usage counters are in `data/luna_routines.sqlite`.
+
+- **Two kinds:**
+  - **Built-in (data-only):** mail check, today's agenda and to-dos. Each
+    calls one read-only MCP tool directly with `tool.ainvoke` (no LLM, no
+    quota) and feeds the HUD widgets. They are seeded switched off.
+  - **Agent:** your prompt on a cron schedule. It runs on the current
+    agent with the normal `TaskBudget` on thread `routine-<id>`.
+- **No unattended approvals.** Nobody is there to approve, so every
+  approval pause is rejected automatically; only tools in
+  `LUNA_AUTO_APPROVE` run, because they never pause. Questions get "the
+  user is away". This keeps D9.
+- **One routine at a time,** never the same routine twice at once.
+- **Missed runs are not made up:** the next run is scheduled from now.
+  Schedules use a small 5-field cron parser (`routines/cron.py`, no new
+  dependency) in `LUNA_TIMEZONE`.
+- **Partial reversal of D32.** D32's "no background timer" still holds for
+  to-do sync, which stays per call. The scheduler lives in luna-web, the
+  only long-running process.
+
+Ruled out:
+- APScheduler or croniter. Extra dependencies for about 100 lines.
+- System cron or a separate daemon. That needs a second process that
+  shares the agent and the MCP connections.
+- Letting routines approve risky tools. That would break D9 silently.
+
+## D36 — Google can be connected from the Control Center (2026-10-18, spec8)
+"Connect Google" runs the same `InstalledAppFlow.run_local_server` as
+`luna-google-auth`, in a worker thread with a 5-minute timeout. It needs
+the browser on the machine that runs luna-web, which is the normal local
+setup. "Sign out" deletes the token. The CLI command stays for headless
+machines. This revises D32's "sign-in is a separate command".

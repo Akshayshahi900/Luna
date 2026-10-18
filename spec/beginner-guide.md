@@ -348,7 +348,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
 
 ## Next reading
 
-- Design / decisions: [`spec1.md`](spec1.md)
+- Design / decisions: [`spec1.md`](spec1.md) (later specs up to [`spec8.md`](spec8.md): the web Control Center and routines)
 - Quick start: [`../README.md`](../README.md)
 - Official LangChain agents: https://docs.langchain.com/oss/python/langchain/agents
 - MCP in LangChain: https://docs.langchain.com/oss/python/langchain/mcp

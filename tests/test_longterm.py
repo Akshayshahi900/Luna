@@ -52,6 +52,20 @@ def test_add_edit_pin_delete_and_list_order(store):
         store.get(tea["id"])
 
 
+def test_stats_count_kinds_pins_deletes_and_inbox(store):
+    a = store.add("Likes tea", "preference", pinned=True)
+    store.add("Lives in Agra")
+    gone = store.add("Old fact")
+    store.delete(gone["id"])
+    store.suggest("add", text="Has a cat", kind="fact")
+    stats = store.stats()
+    assert stats["total"] == 2
+    assert stats["by_kind"] == {"fact": 1, "preference": 1, "person": 0, "project": 0}
+    assert stats["pinned"] == 1 and stats["deleted"] == 1 and stats["pending"] == 1
+    assert stats["changes"] >= 4
+    assert a["pinned"]
+
+
 def test_add_validates_text_and_kind(store):
     with pytest.raises(MemoryRefused):
         store.add("   ")

@@ -1,5 +1,6 @@
 // Messages on the /ws socket. Mirrors src/luna/web/server.py + events.py;
 // the full protocol is documented in docs/web-ui.md.
+import type { DashboardPrefs, RoutineRun } from "./control";
 
 export interface ApprovalAction {
   name: string;
@@ -120,7 +121,18 @@ export type ServerEvent =
   | { type: "memories"; items: Memory[]; suggestions: MemorySuggestion[] }
   | { type: "memory_inbox"; count: number }
   | { type: "memory_history"; id: number; entries: MemoryHistoryEntry[] }
-  | { type: "memory_error"; message: string };
+  | { type: "memory_error"; message: string }
+  // Control Center (src/luna/web/control.py, src/luna/routines/).
+  /** a routine finished (HUD widgets refresh from it) */
+  | {
+      type: "routine_result";
+      routine: { id: number; name: string; kind: "builtin" | "agent"; builtin: string | null; notify: boolean };
+      run: RoutineRun;
+    }
+  /** settings were saved in a Control Center (any tab) */
+  | { type: "settings_changed"; keys: string[]; restart_required: string[] }
+  /** HUD widget preferences changed */
+  | { type: "dashboard"; prefs: DashboardPrefs };
 
 export type Decision =
   | { type: "approve" }

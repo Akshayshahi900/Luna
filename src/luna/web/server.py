@@ -44,6 +44,12 @@ A run happens in a background task, so the socket keeps listening: a
 {"type": "cancel"} stops it, and cancel_cleanup() gives every unanswered
 tool call a "Cancelled by the user." result so the thread stays valid.
 
+Control Center (luna/web/control.py): JSON routes under /api/control/ for
+settings (written to .env), MCP connectors, sign-ins, permissions, stats
+and routines. Routines (luna/routines/) run in the background while the
+server runs; each result goes to every tab as {"type": "routine_result"},
+and saved settings as {"type": "settings_changed"}.
+
 SECURITY: the agent can write files and (after approval) run commands, and
 any web page you visit could try to open ws://127.0.0.1:8765. So the socket
 only accepts browsers whose Origin is this server itself or one listed in
@@ -54,9 +60,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from urllib.parse import urlsplit
 
 from langchain_core.messages import ToolMessage
@@ -78,9 +88,11 @@ from luna.agent.runner import run_task
 from luna.agent.sessions import delete_session, list_sessions, new_session_id
 from luna.cli.chat import agent_tool_names
 from luna.config import Settings, get_settings
-from luna.config.settings import PROJECT_ROOT
+from luna.config.settings import DEFAULT_DASHBOARD_PATH, DEFAULT_ENV_PATH, PROJECT_ROOT
+from luna.routines import RoutineScheduler, RoutineStore, make_executor
 from luna.voice.stt import create_stt, wav_to_samples
 from luna.voice.tts import MAX_TEXT_CHARS, create_tts
+from luna.web.control import control_routes, init_control_state
 from luna.web.events import EventTranslator, build_answer, describe_pause
 
 # `npm run build` in web/ writes the frontend here.
@@ -136,6 +148,14 @@ class AgentHost:
         self.memory: LongTermStore | None = None
         # Every open tab's send function, told when the model changes.
         self.listeners: set[Callable[[dict], None]] = set()
+        # For the Control Center (luna/web/control.py):
+        self.started_at = time.time()
+        self.mcp_groups: dict[str | None, list[Any]] = {}  # tools by helper tag
+        self.mcp_errors: dict[str | None, str] = {}  # helper tag → why its MCP group failed
+        self.routines: RoutineStore | None = None  # routines + usage counters
+        self.scheduler: RoutineScheduler | None = None
+        # Model / tool calls and errors since startup (per day in self.routines).
+        self.usage = {"runs": 0, "model_calls": 0, "tool_calls": 0, "errors": 0}
 
     @property
     def can_switch(self) -> bool:
@@ -157,6 +177,31 @@ class AgentHost:
             self.provider, self.model = provider, model
         for send in list(self.listeners):
             send(self.info())
+
+    async def reconfigure(self, settings: Settings) -> bool:
+        """Use new settings (saved in the Control Center) and rebuild the
+        agent with them, keeping the model. Returns True if it was rebuilt."""
+        self.settings = settings
+        if self._rebuild is None:
+            return False
+        async with self._lock:
+            self.agent = await self._rebuild(self.provider, self.model)
+        return True
+
+    def broadcast(self, event: dict) -> None:
+        """Send one event to every open tab."""
+        for send in list(self.listeners):
+            send(event)
+
+    def record_usage(self, runs: int = 0, model_calls: int = 0, tool_calls: int = 0, errors: int = 0) -> None:
+        """Count one run's model / tool calls for the Control Center stats."""
+        for key, value in (("runs", runs), ("model_calls", model_calls), ("tool_calls", tool_calls), ("errors", errors)):
+            self.usage[key] += value
+        if self.routines is not None:
+            try:
+                self.routines.add_usage(self.provider, self.model, runs, model_calls, tool_calls, errors)
+            except Exception as exc:  # noqa: BLE001 — stats must never break a run
+                print(f"Warning: could not save usage ({exc}).", file=sys.stderr)
 
     def broadcast_inbox(self) -> None:
         """Tell every tab how many memory suggestions are waiting."""
@@ -204,7 +249,6 @@ class Session:
 
     def __init__(self, host: AgentHost, settings: Settings, send: Callable[[dict], None]) -> None:
         self.host = host
-        self.settings = settings
         self.send = send
         # Always a fresh session; old ones are resumed on request.
         self.thread_id = new_session_id()
@@ -212,6 +256,12 @@ class Session:
         self.budget: TaskBudget | None = None
         self._translate = EventTranslator()
         self.task: asyncio.Task | None = None  # the run in progress, if any
+        self._counts = {"model_calls": 0, "tool_calls": 0}  # this run, for host.usage
+
+    @property
+    def settings(self) -> Settings:
+        """The host's settings (they change when saved in the Control Center)."""
+        return self.host.settings
 
     @property
     def busy(self) -> bool:
@@ -234,8 +284,16 @@ class Session:
         }
 
     def _forward(self, namespace: tuple[str, ...], mode: str, payload: Any) -> None:
+        if mode == "updates" and isinstance(payload, dict) and "model" in payload:
+            self._counts["model_calls"] += 1  # one "model" update = one model call (any agent)
         for event in self._translate(namespace, mode, payload):
+            if event["type"] == "tool_call":
+                self._counts["tool_calls"] += 1
             self.send(event)
+
+    def _record(self, error: bool = False) -> None:
+        self.host.record_usage(runs=1, errors=int(error), **self._counts)
+        self._counts = {"model_calls": 0, "tool_calls": 0}
 
     def _set_pending(self, interrupts: list[Interrupt]) -> None:
         self.pending = {i.id: describe_pause(i) for i in interrupts}
@@ -330,6 +388,7 @@ class Session:
         try:
             interrupts = await run_task(agent, payload, config, budget=self.budget, on_event=self._forward)
         except asyncio.CancelledError:
+            self._record()
             closed = await cancel_cleanup(agent, config)
             self.pending = {}
             self.budget = None
@@ -337,11 +396,13 @@ class Session:
             self.send({"type": "cancelled", "tools": closed})
             return
         except Exception as exc:  # noqa: BLE001 — report to the browser, keep the socket open
+            self._record(error=True)
             self.pending = {}
             self.budget = None
             await self._send_context(agent, config)
             self.send({"type": "error", "message": str(exc) or type(exc).__name__})
             return
+        self._record()
         self._set_pending(interrupts)
         # Before the final event, so the browser has it when the run ends.
         self._send_inbox()
@@ -562,18 +623,70 @@ async def _build_host(settings: Settings) -> AgentHost:
     """build_agent, but keeping the parts so the model can be swapped later."""
     model = make_model(settings)  # fails fast if the startup provider has no key
     checkpointer = await create_checkpointer(backend=settings.memory_backend, path=settings.checkpoint_path)
-    mcp_groups = await load_mcp_groups(settings)
+    mcp_errors: dict[str | None, str] = {}
+    mcp_groups = await load_mcp_groups(settings, mcp_errors)
     memory = open_longterm_store(settings)
 
     async def rebuild(provider: str, model_name: str) -> Any:
-        new_model = make_model(settings, provider, model_name)
-        return (await assemble_agent(settings, new_model, checkpointer, mcp_groups, memory))[0]
+        # host.settings, not settings: the Control Center may have saved new ones.
+        new = host.settings
+        new_model = make_model(new, provider, model_name)
+        return (await assemble_agent(new, new_model, checkpointer, mcp_groups, memory))[0]
 
     agent, _ = await assemble_agent(settings, model, checkpointer, mcp_groups, memory)
     default = get_provider(settings.provider).default_model(settings)
     host = AgentHost(agent, settings, settings.provider, default, rebuild)
     host.memory = memory
+    host.mcp_groups, host.mcp_errors = mcp_groups, mcp_errors
     return host
+
+
+def _timezone(settings: Settings) -> Any:
+    """LUNA_TIMEZONE, else the machine's local timezone (None)."""
+    if not settings.timezone:
+        return None
+    try:
+        return ZoneInfo(settings.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        print(f"Warning: unknown LUNA_TIMEZONE {settings.timezone!r}; using local time.", file=sys.stderr)
+        return None
+
+
+def _start_routines(host: AgentHost, store: RoutineStore | None) -> None:
+    """Attach the routines store and start the scheduler (if routines are on)."""
+    host.routines = store
+    if store is None:
+        return
+    store.seed_builtins()
+    # Imported here: luna.routines.agent imports luna.web.events (this package).
+    from luna.routines.agent import run_agent_routine
+
+    def tools() -> dict[str, Any]:
+        return {t.name: t for group in host.mcp_groups.values() for t in group}
+
+    async def run_agent(routine: dict[str, Any]) -> tuple[str, str, Any]:
+        counts = {"model_calls": 0, "tool_calls": 0}
+
+        def count(namespace: tuple[str, ...], mode: str, payload: Any) -> None:
+            if mode != "updates" or not isinstance(payload, dict):
+                return
+            if "model" in payload:
+                counts["model_calls"] += 1
+            for update in payload.values():
+                for m in (update or {}).get("messages", []) if isinstance(update, dict) else []:
+                    if m.type == "ai":
+                        counts["tool_calls"] += len(m.tool_calls)
+
+        try:
+            result = await run_agent_routine(host.agent, routine, host.settings, on_event=count)
+        except Exception:
+            host.record_usage(runs=1, errors=1, **counts)
+            raise
+        host.record_usage(runs=1, errors=int(result[0] == "error"), **counts)
+        return result
+
+    host.scheduler = RoutineScheduler(store, make_executor(tools, run_agent, store), notify=host.broadcast)
+    host.scheduler.start()
 
 
 def create_app(
@@ -583,10 +696,16 @@ def create_app(
     tts_engine: Any = None,
     stt_engine: Any = None,
     memory_store: LongTermStore | None = None,
+    routine_store: RoutineStore | None = None,
+    mcp_groups: dict[str | None, list[Any]] | None = None,
+    env_path: Path | str | None = None,
+    dashboard_path: Path | str | None = None,
 ) -> Starlette:
     """Build the web app. Pass ``agent`` (and optionally ``rebuild`` /
-    ``tts_engine`` / ``stt_engine`` / ``memory_store``) to skip building the
-    real ones (tests do)."""
+    ``tts_engine`` / ``stt_engine`` / ``memory_store`` / ``routine_store`` /
+    ``mcp_groups``) to skip building the real ones (tests do). ``env_path``
+    and ``dashboard_path`` are where the Control Center saves (default: the
+    project's .env and data/dashboard.json)."""
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -597,10 +716,15 @@ def create_app(
             host = AgentHost(agent, settings, settings.provider, default, rebuild)
             host.tts, host.stt = tts_engine, stt_engine
             host.memory = memory_store
+            host.mcp_groups = mcp_groups or {}
+            routines = routine_store
         else:
             host = await _build_host(settings)
             host.tts, host.stt = create_tts(settings), create_stt(settings)
+            routines = RoutineStore(settings.routines_path, _timezone(settings)) if settings.routines_enabled else None
         app.state.host = host
+        init_control_state(app.state, env_path or DEFAULT_ENV_PATH, dashboard_path or DEFAULT_DASHBOARD_PATH)
+        _start_routines(host, routines)
         # Load the voice models in the background so startup stays fast.
         warm = [asyncio.create_task(e.warm_up()) for e in (host.tts, host.stt) if e is not None]
         try:
@@ -608,7 +732,11 @@ def create_app(
         finally:
             for task in warm:
                 task.cancel()
+            if host.scheduler is not None:
+                await host.scheduler.stop()
             if agent is None:
+                if host.routines is not None:
+                    host.routines.close()
                 await close_checkpointers()
                 if host.memory is not None:
                     host.memory.close()
@@ -618,6 +746,7 @@ def create_app(
         Route("/api/health", health),
         Route("/api/tts", tts, methods=["POST"]),
         Route("/api/stt", stt, methods=["POST"]),
+        *control_routes(),
     ]
     if (DIST_DIR / "index.html").exists():
         routes.append(Mount("/", StaticFiles(directory=DIST_DIR, html=True)))

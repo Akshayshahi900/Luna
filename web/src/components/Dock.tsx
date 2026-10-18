@@ -1,6 +1,6 @@
 // Bottom controls: the big talk button plus a few toggles.
 import { motion } from "motion/react";
-import { CloseIcon, KeyboardIcon, LoopIcon, MemoryIcon, MicIcon, SpeakerIcon, TranscriptIcon } from "./icons";
+import { CloseIcon, GearIcon, KeyboardIcon, LoopIcon, MemoryIcon, MicIcon, SpeakerIcon, TranscriptIcon } from "./icons";
 
 interface Props {
   listening: boolean;
@@ -22,6 +22,8 @@ interface Props {
   /** suggestions waiting for the user (badge) */
   inbox: number;
   onMemory: () => void;
+  /** open the Control Center */
+  onSettings: () => void;
 }
 
 export function Dock(p: Props) {
@@ -78,6 +80,10 @@ export function Dock(p: Props) {
           {p.inbox > 0 && <b className="dock-badge">{p.inbox}</b>}
         </button>
       )}
+      <button className="dock-btn" onClick={p.onSettings} title="Control Center (S)">
+        <GearIcon />
+        <span>SYSTEM</span>
+      </button>
     </nav>
   );
 }

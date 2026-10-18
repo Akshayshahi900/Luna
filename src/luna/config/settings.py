@@ -41,6 +41,9 @@ DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
 DEFAULT_STT_DIR = PROJECT_ROOT / "data" / "models" / "whisper"
 DEFAULT_PERSONA_PATH = PROJECT_ROOT / "config" / "persona.md"
 DEFAULT_GOOGLE_DIR = PROJECT_ROOT / "data" / "google"
+DEFAULT_ROUTINES_PATH = PROJECT_ROOT / "data" / "luna_routines.sqlite"
+DEFAULT_DASHBOARD_PATH = PROJECT_ROOT / "data" / "dashboard.json"
+DEFAULT_ENV_PATH = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -55,7 +58,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="LUNA_",
         # Absolute path so `luna` works from any working directory.
-        env_file=PROJECT_ROOT / ".env",
+        env_file=DEFAULT_ENV_PATH,
         env_file_encoding="utf-8",
         extra="ignore",  # ignore unknown env vars instead of crashing
     )
@@ -355,6 +358,18 @@ class Settings(BaseSettings):
     )
     stt_models_dir: Path = Field(default=DEFAULT_STT_DIR, description="Where Whisper models are kept")
     stt_threads: int = Field(default=4, description="CPU threads for Whisper")
+
+    # --- Routines (luna/routines/; docs/control-center.md) ---
+    # Scheduled jobs that run inside luna-web: data-only checks (mail, agenda,
+    # to-dos) and prompts run by the agent. Only while luna-web is running.
+    routines_enabled: bool = Field(
+        default=True,
+        description="Run scheduled routines while luna-web is running",
+    )
+    routines_path: Path = Field(
+        default=DEFAULT_ROUTINES_PATH,
+        description="SQLite file for routines, their runs and API usage counters",
+    )
 
     @field_validator("stt_engine")
     @classmethod

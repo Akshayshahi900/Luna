@@ -196,6 +196,14 @@ is `LUNA_PROVIDER`).
 | `LUNA_WEB_PORT` | `8765` | Port |
 | `LUNA_WEB_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Extra browser origins allowed to open the socket (the server's own origin is always allowed) |
 
+## Control Center
+
+The **SYSTEM** button in the dock (or **S**, or `#/control`) opens the
+Control Center: settings saved to `.env`, MCP connectors, logins, model
+providers, the web server, permissions, HUD widgets, routines and live
+stats. Routine results show as small widgets in a bottom corner of the HUD.
+Full guide: [`control-center.md`](control-center.md).
+
 ## WebSocket protocol (`/ws`)
 
 JSON messages, one per frame. Server side: `src/luna/web/server.py`
@@ -224,6 +232,9 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 | `memory_inbox` | `count` | pending suggestions; after `context` on sync, before each run's `context` + final event, and to every tab after a suggestion is accepted or declined (only when memory is on) |
 | `memory_history` | `id`, `entries: [{action, before, after, source, at, undone}]` | reply to `memory_history`, newest first |
 | `memory_error` | `message` | a memory request failed (unknown id, empty text, memory off). Unlike `error`, it doesn't end a run |
+| `routine_result` | `routine: {id, name, kind, builtin, notify}`, `run: {id, status, summary, data, error, started_at, finished_at}` | a routine finished (to every tab; the HUD widgets update from built-in results) |
+| `settings_changed` | `keys`, `restart_required` | settings or MCP servers were saved in a Control Center (to every tab) |
+| `dashboard` | `prefs` | HUD widget preferences changed (to every tab) |
 
 A pause is one of:
 
@@ -250,6 +261,7 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 | `POST /api/stt` (body: 16 kHz mono 16-bit WAV, ≤ 30 s) | `{"text": "..."}` ("" if nothing was said). 400 bad audio, 403 foreign origin, 404 when STT is off |
 | `POST /api/tts` `{"text": "..."}` | WAV (16-bit mono) of one sentence. 400 for empty/over 1000 chars, 403 foreign origin, 404 when TTS is off, 500 if synthesis fails |
 | `GET /api/health` | `{status, provider, model}` |
+| `/api/control/*` | Control Center API (settings, MCP, logins, providers, permissions, stats, routines): see [`control-center.md`](control-center.md#http-api) |
 
 ### Browser → server
 
@@ -295,7 +307,12 @@ src/lib/theme.ts         phases → colors / energy, helper codenames
 src/core/                the 3D core (React Three Fiber, shaders, bloom)
 src/components/          HUD, captions, dock, command line, chat drawer, pause card,
                          boot, ModelSwitcher (provider/model popover),
-                         MemoryPanel (long-term memory: inbox + saved)
+                         MemoryPanel (long-term memory: inbox + saved),
+                         InsightWidgets (routine results on the HUD)
+src/components/control/  Control Center: shell (ControlCenter), Overview, Models,
+                         Connectors, Accounts, Permissions, Routines, SystemApps,
+                         SettingsForm (schema-driven form)
+src/lib/control.ts       Control API client + formatting / sparkline helpers (tested)
 ```
 
 Tests: `cd web && npm test` (vitest, pure modules) and `uv run pytest tests/test_web.py`.

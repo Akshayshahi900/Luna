@@ -120,6 +120,19 @@ See [`web-ui.md`](web-ui.md).
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Piper voice cache |
 | `LUNA_TTS_LENGTH_SCALE` | `0.95` | Speaking pace: < 1 faster, > 1 slower |
 
+## Routines
+
+Scheduled jobs that run inside `luna-web` ([`control-center.md`](control-center.md#routines)).
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LUNA_ROUTINES_ENABLED` | `true` | Run scheduled routines while luna-web runs |
+| `LUNA_ROUTINES_PATH` | `data/luna_routines.sqlite` | Routines, their runs and API usage counters |
+
+Every setting on this page can also be changed in the web UI's Control
+Center, which writes `.env` in place (comments kept) and says whether a
+change applies at once or after a restart.
+
 ## What lives where
 
 | Path | Contents | In git? |
@@ -127,5 +140,5 @@ See [`web-ui.md`](web-ui.md).
 | `.env` | your keys and overrides | no |
 | `config/mcp_servers.json` | MCP servers | yes |
 | `config/persona.md` | personal instructions | no |
-| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models | no |
+| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models, routines, `dashboard.json` (HUD widget preferences) | no |
 | `workspace/` | default sandbox for the files / coder helpers | no |

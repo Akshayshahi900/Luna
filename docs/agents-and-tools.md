@@ -58,6 +58,8 @@ File and shell tools (`tools/fs.py`, `tools/shell.py`) are sandboxed to
 
 - `command` + `args` start a local stdio server; `url` connects to an HTTP one.
 - `"agent"` gives the server's tools to that helper instead of the main agent.
+- `"disabled": true` keeps the entry but doesn't load it (the web
+  Control Center's Connectors app sets it; [`control-center.md`](control-center.md)).
 - A tool whose name contains a changing verb (`send`, `create`, `update`,
   `delete`, `write`, `add`, `set`, `reply`, …) asks for approval
   automatically (`is_risky_tool_name` in `mcp/loader.py`, D9).

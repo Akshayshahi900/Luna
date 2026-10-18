@@ -4,6 +4,7 @@
 
 - [Command line](cli.md): `luna`, chat commands, `/memory`, approvals
 - [Web UI](web-ui.md): voice, wake word, keyboard shortcuts, WebSocket protocol
+- [Control Center](control-center.md): settings, connectors, logins, permissions, routines, live stats
 - [Configuration](configuration.md): every `LUNA_*` setting
 - [Personalization](personalization.md): how Luna talks and addresses you
 - [Memory](memory.md): short-term threads and long-term memory

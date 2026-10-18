@@ -2,9 +2,11 @@
 
 Luna is a general assistant: one main ReAct agent that does quick work
 itself and hands bigger jobs to helper subagents. Design history is in
-`spec/` (spec1 → spec5); decisions and their reasons in `DECISIONS.md`.
+`spec/` (spec1 → spec8); decisions and their reasons in `DECISIONS.md`.
 Two front doors share the same agent code: the terminal CLI and a
-voice-first web UI (`docs/web-ui.md`).
+voice-first web UI (`docs/web-ui.md`). The web UI also has a Control
+Center for settings, connectors, permissions, routines and live stats
+(`docs/control-center.md`).
 
 ## Topology
 
@@ -36,6 +38,18 @@ voice-first web UI (`docs/web-ui.md`).
           memories, suggestions, history; only the user writes memories)
           · workspace/ (files the helpers may touch) · data/tasks.json (to-dos,
           synced with Google Tasks) · data/google/ (OAuth client + token)
+          · data/luna_routines.sqlite (routines, runs, usage counters)
+          · data/dashboard.json (HUD widget preferences)
+
+ Control Center (luna-web only): browser #/control ── /api/control/* (web/control.py)
+   settings ⇄ .env (config/envfile.py + schema.py; validated, rolled back on error)
+   MCP servers ⇄ config/mcp_servers.json · Google sign-in · permissions (LUNA_AUTO_APPROVE)
+   stats: process, memory, sessions, tools, usage counters (Session → AgentHost.usage)
+   routines: RoutineScheduler (routines/) ticks every 30 s →
+     builtin: one read-only MCP tool via tool.ainvoke (no LLM) → HUD widgets
+     agent:   run_task on thread routine-<id>, approvals auto-rejected
+   → data/luna_routines.sqlite (routines, runs, usage) · data/dashboard.json
+   → {"type": "routine_result"} / {"type": "settings_changed"} to every tab
 
  Google: one sign-in (integrations/google.py, `luna-google-auth`) shared by
          mail (Gmail API) · google (Calendar) · tasks (Google Tasks sync).
@@ -96,7 +110,18 @@ src/luna/
                            messages), /api/tts, /api/stt,
                            origin check, serves web/dist
     events.py              stream events → JSON; pause describe / answer conversion
+    control.py             /api/control/*: settings, MCP connectors, Google connect, providers,
+                           permissions, stats, dashboard prefs, routines, cron check
   config/settings.py       all LUNA_* settings
+  config/envfile.py        read / edit .env in place (comments kept, atomic)
+  config/schema.py         settings → grouped form schema (secrets masked, live/rebuild/restart);
+                           save_settings (validate, roll back)
+  routines/
+    cron.py                5-field cron: parse, next_run, describe
+    store.py               RoutineStore (SQLite): routines, runs, usage per day
+    builtin.py             mail_check / agenda / todos: one read-only MCP tool each, no LLM
+    agent.py               run_agent_routine: prompt on thread routine-<id>, approvals rejected
+    scheduler.py           RoutineScheduler: due routines one at a time → routine_result
   agent/
     builder.py             build_agent (model, checkpointer, MCP) → assemble_agent (tools,
                            middleware, delegates); assemble again = switch model
@@ -138,13 +163,16 @@ servers/google_mcp_server.py Google Calendar for ask_assistant; get_agenda adds 
 tests/                     pytest suite (fake models, no API key)
 web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
   src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
-  src/core (3D core), src/components (HUD, drawer, pause card, memory panel)
+  src/core (3D core), src/components (HUD, drawer, pause card, memory panel,
+  InsightWidgets), src/components/control (Control Center apps), src/lib/control.ts
+  (Control API client), src/control.css
 docs/README.md             index of all docs
 docs/configuration.md      every LUNA_* setting, what lives where
 docs/cli.md                luna commands, /memory, approvals
 docs/agents-and-tools.md   main agent, helpers, MCP servers, how to extend
 docs/development.md        setup, layout, tests, web dev, which docs to update
 docs/web-ui.md             running the web UI, WebSocket protocol
+docs/control-center.md     Control Center: apps, routines, what applies when, HTTP API
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
 docs/google.md             Google sign-in (Gmail, Calendar, Tasks), calendar tools, to-do sync, email → to-do / event

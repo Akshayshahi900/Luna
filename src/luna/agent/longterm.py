@@ -380,6 +380,28 @@ class LongTermStore:
         with self._lock:
             return self._conn.execute("SELECT COUNT(*) FROM suggestions WHERE status = 'pending'").fetchone()[0]
 
+    def stats(self) -> dict[str, Any]:
+        """Counts for the Control Center: active memories by kind, pinned,
+        deleted (still undoable), pending suggestions, and history entries."""
+        with self._lock:
+            by_kind = dict(self._conn.execute(
+                "SELECT kind, COUNT(*) FROM memories WHERE deleted_at IS NULL GROUP BY kind"
+            ).fetchall())
+            pinned, deleted = self._conn.execute(
+                "SELECT COALESCE(SUM(deleted_at IS NULL AND pinned = 1), 0), "
+                "COALESCE(SUM(deleted_at IS NOT NULL), 0) FROM memories"
+            ).fetchone()
+            pending = self._conn.execute("SELECT COUNT(*) FROM suggestions WHERE status = 'pending'").fetchone()[0]
+            changes = self._conn.execute("SELECT COUNT(*) FROM memory_history").fetchone()[0]
+        return {
+            "total": sum(by_kind.values()),
+            "by_kind": {k: by_kind.get(k, 0) for k in KINDS},
+            "pinned": pinned,
+            "deleted": deleted,
+            "pending": pending,
+            "changes": changes,
+        }
+
     def suggest(
         self,
         action: str,

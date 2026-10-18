@@ -55,9 +55,15 @@ def load_mcp_config(path: Path | str) -> dict[str, Any] | None:
         return None
 
     data = json.loads(config_path.read_text(encoding="utf-8"))
-    servers = data.get("mcpServers") or {}
+    # "disabled": true (set from the Control Center) keeps an entry without loading it.
+    servers = {
+        name: {k: v for k, v in server.items() if k != "disabled"}
+        for name, server in (data.get("mcpServers") or {}).items()
+        if not server.get("disabled")
+    }
     if not servers:
         return None
+    data["mcpServers"] = servers
     # Relative paths in "args" (e.g. servers/demo_mcp_server.py) mean "from the
     # project root", so run stdio servers there unless the entry sets its own cwd.
     for server in servers.values():

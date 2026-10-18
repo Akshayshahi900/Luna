@@ -44,12 +44,16 @@ from luna.tools.builtin import get_builtin_tools
 from luna.tools.registry import ToolRegistry
 
 
-async def load_mcp_groups(settings: Settings) -> dict[str | None, list[Any]]:
+async def load_mcp_groups(
+    settings: Settings, errors: dict[str | None, str] | None = None
+) -> dict[str | None, list[Any]]:
     """Load MCP tools, grouped by the server's "agent" tag (None = main agent).
 
     May start MCP server subprocesses / open HTTP connections.
     A broken server should not stop Luna from starting: warn and carry on
     with whatever tools we already have (only that group is skipped).
+    Pass ``errors`` to also collect each failed group's error (the Control
+    Center shows them).
     """
     if not settings.enable_mcp_tools:
         return {}
@@ -57,6 +61,8 @@ async def load_mcp_groups(settings: Settings) -> dict[str | None, list[Any]]:
         config = load_mcp_config(settings.mcp_config_path)
     except Exception as exc:  # noqa: BLE001 — e.g. invalid JSON
         print(f"Warning: could not load MCP tools ({exc}). Continuing without them.", file=sys.stderr)
+        if errors is not None:
+            errors[None] = f"Invalid MCP config: {exc}"
         return {}
     if config is None:
         return {}
@@ -66,6 +72,8 @@ async def load_mcp_groups(settings: Settings) -> dict[str | None, list[Any]]:
         try:
             groups[agent] = await load_mcp_tools(group_config)
         except Exception as exc:  # noqa: BLE001 — any MCP failure is non-fatal
+            if errors is not None:
+                errors[agent] = str(exc) or type(exc).__name__
             owner = f"the {agent} helper" if agent else "the main agent"
             print(
                 f"Warning: could not load MCP tools for {owner} ({exc}). "

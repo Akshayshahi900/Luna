@@ -63,7 +63,8 @@ are in `web/src/lib/protocol.ts` and `src/luna/web/events.py`.
 | --- | --- |
 | an architectural choice | add `D<n>` to `DECISIONS.md` |
 | files, topology, data flow | `ARCHITECTURE.md` |
-| a setting | `settings.py` field description, `.env.example`, [`configuration.md`](configuration.md) |
+| a setting | `settings.py` field description, `.env.example`, [`configuration.md`](configuration.md); put the field in a group in `config/schema.py` (`GROUPS`) so the Control Center shows it (a test checks every field has a group) |
+| a Control Center route or routine | [`control-center.md`](control-center.md), `web/src/lib/control.ts` types |
 | a CLI command | `HELP_TEXT` in `cli/chat.py`, [`cli.md`](cli.md) |
 | a tool, helper or MCP server | [`agents-and-tools.md`](agents-and-tools.md) |
 | feature design | the matching `spec/specN.md` |

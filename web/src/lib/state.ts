@@ -304,6 +304,12 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
 
     case "memory_error":
       return { ...state, memoryError: event.message };
+
+    // Control Center events: App.tsx and the widgets react to them directly.
+    case "routine_result":
+    case "settings_changed":
+    case "dashboard":
+      return state;
   }
 }
 
