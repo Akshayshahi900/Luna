@@ -66,7 +66,8 @@ Luna/
 ├── config/
 │   └── mcp_servers.json      ← which MCP tool-servers to connect
 ├── servers/
-│   └── demo_mcp_server.py    ← tiny example MCP server (2 tools)
+│   ├── demo_mcp_server.py    ← tiny example MCP server (2 tools)
+│   └── tasks_mcp_server.py   ← local to-dos for the assistant helper
 └── src/luna/                 ← the actual app
     ├── __init__.py           ← entry point → starts the chat CLI
     ├── cli/chat.py           ← the interactive chat loop (You> / Luna>)
@@ -220,9 +221,10 @@ Analogy:
 - Built-in tools = apps installed on your phone  
 - MCP tools = apps on another phone that your phone can call over a standard cable  
 
-`config/mcp_servers.json` lists those other programs. It is **empty by
-default**; to try the demo server, copy the `demo` entry from
-`config/mcp_servers.example.json` into it:
+`config/mcp_servers.json` lists those other programs. By default it
+connects the demo server below, a local to-do server for the assistant
+helper (`servers/tasks_mcp_server.py`) and the LangChain docs server for
+the researcher. The smallest possible config looks like this:
 
 ```json
 {
@@ -324,7 +326,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
    Type `/tools` to see names.
 
 3. **Turn MCP off**  
-   With the demo server added to `config/mcp_servers.json`, run  
+   With the demo server in `config/mcp_servers.json` (it is by default), run  
    `LUNA_ENABLE_MCP_TOOLS=false uv run luna`  
    `/tools` should no longer show `reverse_text` / `word_count`.
 
@@ -338,7 +340,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
 | Symptom | Likely cause |
 | --- | --- |
 | Authentication error when chatting | Set `LUNA_OPENROUTER_API_KEY` in `.env` and check the key is valid |
-| MCP tools missing | Config empty (the default), MCP disabled, server failed to start, or the server is tagged for a helper |
+| MCP tools missing | Config empty, MCP disabled, server failed to start, or the server is tagged for a helper |
 | Forgets everything after restart | Using `memory` backend instead of `sqlite` |
 | Forgets after `/new` | Expected — new `thread_id` |
 

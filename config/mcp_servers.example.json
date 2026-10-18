@@ -4,6 +4,11 @@
       "command": "uv",
       "args": ["run", "python", "servers/demo_mcp_server.py"]
     },
+    "tasks": {
+      "command": "uv",
+      "args": ["run", "python", "servers/tasks_mcp_server.py"],
+      "agent": "assistant"
+    },
     "langchain_docs": {
       "url": "https://docs.langchain.com/mcp",
       "agent": "researcher"

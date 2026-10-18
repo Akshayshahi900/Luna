@@ -2,7 +2,7 @@
 
 A general assistant on LangGraph: one main agent that does quick work
 itself and hands bigger jobs to helper agents — **researcher** (web),
-**files**, **coder** and **assistant** (calendar / mail via MCP). Risky
+**files**, **coder** and **assistant** (local to-dos by default; calendar / mail via MCP). Risky
 actions (writing files, running commands, sending things) ask you first.
 
 ## Quick start

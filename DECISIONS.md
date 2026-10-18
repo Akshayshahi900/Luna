@@ -175,3 +175,17 @@ tools node), so the next model call sees a valid history; this also
 clears an open approval, including one inside a helper. `run_command`
 kills its process group when cancelled. Verified with a prototype before
 building: the follow-up message runs normally in all three cases.
+
+## D24 — Default MCP config wires every helper; to-dos are a local MCP server (2026-10-18, spec3 §6)
+Supersedes D13. The default `config/mcp_servers.json` now loads the demo
+server (main agent), the public LangChain docs server (researcher) and a
+new local `servers/tasks_mcp_server.py` tagged `"assistant"`, so
+`ask_assistant` exists out of the box. To-dos were chosen over Google
+Calendar / Gmail because they need no account, OAuth client or network;
+a Google server can be added later with the same tag. The tasks server
+stores one JSON file (`data/tasks.json`, `LUNA_TASKS_PATH`), written via
+temp-file-and-rename. Tool names (`add_task`, `set_task_done`,
+`delete_task`) contain risky verbs on purpose, so changes ask for
+approval like every other assistant action; `list_tasks` doesn't.
+Cost: the demo banner prints on start again, and the docs server needs
+network (it fails alone and only drops the researcher's extra tools).

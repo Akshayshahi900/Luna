@@ -110,13 +110,19 @@ inside one can resume; each call still starts with only `[system, task]`.
 
 ## 6. MCP routing
 
-`config/mcp_servers.json` (empty by default, D13). Per server, optional
+`config/mcp_servers.json` (D24: ships with demo → main agent, `tasks` → assistant,
+`langchain_docs` → researcher). Per server, optional
 `"agent": "<helper>"`:
 
 - none → main agent
 - `"assistant"` → creates `ask_assistant`
 - other (`"researcher"`, `"files"`, `"coder"`) → extra tools for that helper
 - unknown → warning, tools unused
+
+Default assistant backend: `servers/tasks_mcp_server.py` — `list_tasks`,
+`add_task(title, due?, notes?)`, `set_task_done(task_id, done)`,
+`delete_task(task_id)`, stored in `data/tasks.json` (`LUNA_TASKS_PATH`).
+All but `list_tasks` ask for approval.
 
 Each group loads separately; a broken server only drops its own group.
 
@@ -128,13 +134,14 @@ Each group loads separately; a broken server only drops its own group.
 | `LUNA_TAVILY_API_KEY` | unset | Enables the researcher |
 | `LUNA_WORKSPACE_DIRS` | `./workspace` | Comma-separated folders for files/coder |
 | `LUNA_AUTO_APPROVE` | empty | Comma-separated tools that skip approval |
+| `LUNA_TASKS_PATH` | `./data/tasks.json` | To-do file for the tasks MCP server |
 
 ## 8. Verification
 
 `uv run pytest` — 86 tests, fake models, no network except one local stdio
 MCP server. Files: `test_budget`, `test_scratchpad`, `test_hitl`,
 `test_researcher`, `test_fs`, `test_files_subagent`, `test_coder`,
-`test_mcp_routing` (plus the spec1/2 tests).
+`test_mcp_routing`, `test_tasks_server` (plus the spec1/2 tests).
 
 Live (OpenRouter): `ask_user` pause/answer and `write_note` worked through the
 real CLI. A coding request ran into the routing problem in D14, then the free
