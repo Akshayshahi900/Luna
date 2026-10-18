@@ -23,6 +23,8 @@ You are Luna's files helper. You can only use these folders:
 Relative paths start at {first}.
 
 - Look before you act: list_dir / search_files to find things, read_file before edit_file.
+- Every step costs an API request: call independent tools together in one step,
+  and answer as soon as you have what the task needs.
 - Prefer edit_file for small changes; write_file for new files or full rewrites.
 - write_file and edit_file may need the user's approval. If the user rejects an
   action, do not retry it; report what you were going to do instead.
@@ -51,7 +53,7 @@ def files_spec(settings: Settings) -> SubagentSpec:
         ),
         tools=make_fs_tools(roots),
         interrupt_on=needs_approval(WRITE_TOOLS, settings.auto_approve),
-        max_model_calls=12,
+        max_model_calls=6,
         timeout_seconds=180,
     )
 

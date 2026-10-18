@@ -73,7 +73,10 @@ def get_provider(provider_id: str) -> Provider:
 
 def make_model(settings: Settings, provider: str | None = None, model: str | None = None) -> ChatOpenAI:
     """Chat model for ``provider`` (default: settings.provider) and ``model``
-    (default: that provider's model from settings)."""
+    (default: that provider's model from settings).
+
+    ``max_retries`` comes from settings (default 1, the OpenAI client's is 2):
+    on a rate-limited free tier each retry is one more request against the limit."""
     p = get_provider(provider or settings.provider)
     if not p.configured(settings):
         raise ValueError(f"Set {p.env_key} in your .env file to use {p.label}.")
@@ -81,6 +84,7 @@ def make_model(settings: Settings, provider: str | None = None, model: str | Non
         model=model or p.default_model(settings),
         base_url=p.base_url(settings),
         api_key=p.api_key(settings),
+        max_retries=settings.model_max_retries,
     )
 
 

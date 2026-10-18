@@ -51,13 +51,30 @@ Otherwise don't: each hand-off adds latency and cost and loses context
 
 | Where | Mechanism | On hitting it |
 | --- | --- | --- |
-| Main agent model calls | `ModelCallLimitMiddleware(run_limit=LUNA_MAX_MODEL_CALLS)` (25) | Run ends; CLI prints `⚠ Model call limits exceeded…` |
-| Main agent tool calls | `ToolCallLimitMiddleware(run_limit=LUNA_MAX_TOOL_CALLS)` (40) | Extra calls return errors; model answers with what it has |
-| Subagent model calls | `SubagentSpec.max_model_calls` (10) | Delegate returns `[name stopped at its limit of N steps]` + last partial text |
+| Main agent model calls | `ModelCallLimitMiddleware(run_limit=LUNA_MAX_MODEL_CALLS)` (10; was 25) | Run ends; CLI prints `⚠ Model call limits exceeded…` |
+| Main agent tool calls | `ToolCallLimitMiddleware(run_limit=LUNA_MAX_TOOL_CALLS)` (20; was 40) | Extra calls return errors; model answers with what it has |
+| Subagent model calls | `SubagentSpec.max_model_calls` (default 6; researcher 5, files 6, coder 10, assistant 5) | Delegate returns `[name stopped at its limit of N steps]` + last partial text |
 | Subagent wall time | `SubagentSpec.timeout_seconds` (120) via `asyncio.wait_for` | Delegate returns `[name stopped: timed out after Ns]` |
 | Backstop | LangGraph `recursion_limit = max_model_calls * 4 + 10` | Error (should never trigger) |
 
 Limits are **per user message** (`run_limit`), not per thread.
+
+### 3a. Fewer API calls (added 2026-10-18)
+
+Every model call is one request to the provider, and free tiers run out
+fast, so the defaults were cut and the prompts ask for economy (DECISIONS D25):
+
+- Lower caps: main 10 model / 20 tool calls, task budget 30 (was 80),
+  helpers as in the table above.
+- `LUNA_MODEL_MAX_RETRIES` (default 1; the OpenAI client's is 2): each
+  retry of a failed/rate-limited request is another request.
+- Summarization keeps `LUNA_SUMMARY_KEEP_TOKENS` (default 4000, capped at
+  half of `LUNA_SUMMARY_TRIGGER_TOKENS`) instead of 20 messages. Keeping a
+  message count could leave the kept part above the trigger, so every
+  model call would also pay for a fresh summary.
+- Prompts (main and helpers): answer directly when possible, call
+  independent tools in the same step, give a helper everything in one
+  call, and stop searching once the answer is good enough.
 
 ## 4. Implementation
 

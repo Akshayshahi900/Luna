@@ -38,6 +38,7 @@ DEFAULT_CHECKPOINT_PATH = PROJECT_ROOT / "data" / "luna_memory.sqlite"
 DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
 DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
 DEFAULT_STT_DIR = PROJECT_ROOT / "data" / "models" / "whisper"
+DEFAULT_PERSONA_PATH = PROJECT_ROOT / "config" / "persona.md"
 
 
 class Settings(BaseSettings):
@@ -77,6 +78,14 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434/v1", description="Ollama /v1 URL")
     ollama_model: str = Field(default="qwen3:8b", description="Ollama model tag (must support tools)")
 
+    model_max_retries: int = Field(
+        default=1,
+        description=(
+            "How often a failed model request (rate limit, network) is retried. "
+            "Each retry is another API request."
+        ),
+    )
+
     @field_validator("provider")
     @classmethod
     def _known_provider(cls, value: str) -> str:
@@ -89,24 +98,72 @@ class Settings(BaseSettings):
             "You are Luna, a helpful assistant. "
             "Use tools when they help you answer accurately, "
             "and remember prior turns in this conversation. "
+            "Every model call costs an API request, so be economical: answer "
+            "directly from what you know when you can, and when you need several "
+            "independent tools, call them all in the same step. "
             "Do quick things yourself; hand bigger self-contained jobs to your "
-            "ask_* helper tools, giving them every detail they need. "
+            "ask_* helper tools, giving them every detail they need in one call. "
             "Ask the user only when you truly cannot proceed without them."
         ),
-        description="Instructions the model always sees first",
+        description=(
+            "Luna's role. The persona settings below are added to it "
+            "(see luna/agent/persona.py)"
+        ),
     )
 
+    # --- Persona (how Luna talks, who she talks to; see luna/agent/persona.py) ---
+    response_style: str = Field(
+        default="concise",
+        description="'concise' (one or two spoken sentences) or 'detailed'",
+    )
+    user_title: str = Field(
+        default="Sir",
+        description="How Luna addresses you, e.g. 'Sir', 'Ma'am', 'Boss'. Empty = not used",
+    )
+    user_name: str | None = Field(default=None, description="Your name (optional)")
+    user_location: str | None = Field(
+        default=None,
+        description="Default place for weather / local questions, e.g. 'Agra, India'",
+    )
+    units: str = Field(default="metric", description="'metric' or 'imperial'")
+    timezone: str | None = Field(
+        default=None,
+        description="Your IANA timezone, e.g. 'Asia/Kolkata' (used for the local time)",
+    )
+    persona_path: Path | None = Field(
+        default=DEFAULT_PERSONA_PATH,
+        description="Optional Markdown file with extra instructions for Luna",
+    )
+
+    @field_validator("response_style")
+    @classmethod
+    def _known_style(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"concise", "detailed"}:
+            raise ValueError("response_style must be 'concise' or 'detailed'")
+        return value
+
+    @field_validator("units")
+    @classmethod
+    def _known_units(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"metric", "imperial"}:
+            raise ValueError("units must be 'metric' or 'imperial'")
+        return value
+
     # --- Loop limits (stop runaway think → tool → think loops) ---
+    # Defaults are kept low on purpose: every model call is one API request,
+    # and free LLM tiers run out fast (see DECISIONS.md D25).
     max_model_calls: int = Field(
-        default=25,
+        default=10,
         description="Max model calls per user message; the run then ends cleanly",
     )
     max_tool_calls: int = Field(
-        default=40,
+        default=20,
         description="Max tool calls per user message; extra calls are refused",
     )
     task_budget: int = Field(
-        default=80,
+        default=30,
         description=(
             "Max model calls for one user message across the main agent AND "
             "all subagents together"
@@ -130,9 +187,13 @@ class Settings(BaseSettings):
             "tokens (keeps cost and context size bounded). 0 disables."
         ),
     )
-    summary_keep_messages: int = Field(
-        default=20,
-        description="How many recent messages to keep word-for-word after summarizing",
+    summary_keep_tokens: int = Field(
+        default=4000,
+        description=(
+            "How many tokens of recent messages to keep word-for-word after "
+            "summarizing. Kept well below summary_trigger_tokens so one summary "
+            "buys many turns instead of re-summarizing on every model call."
+        ),
     )
 
     # --- Tools ---

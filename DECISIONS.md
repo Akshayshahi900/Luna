@@ -189,3 +189,36 @@ temp-file-and-rename. Tool names (`add_task`, `set_task_done`,
 approval like every other assistant action; `list_tasks` doesn't.
 Cost: the demo banner prints on start again, and the docs server needs
 network (it fails alone and only drops the researcher's extra tools).
+
+## D25 — Spend fewer API calls per message (2026-10-18, spec2 §3a)
+Luna runs mostly on free LLM tiers, where every model call counts against
+a small request limit, and the old defaults let one message use up to 80
+calls. Defaults are now: main agent 10 model / 20 tool calls, task budget
+30, helpers 5–10 steps, and one retry per failed request instead of the
+client's two (a retry after a 429 is another request against the same
+limit). Summarization now keeps a token amount (4000, at most half of the
+12k trigger) instead of 20 messages: with long tool results the 20 kept
+messages alone could pass the trigger, and then every model call paid for
+a second, summarizing call. The prompts also ask for economy (answer
+directly, batch independent tool calls in one step, one complete helper
+call, stop searching when the answer is good enough). Chosen over caching
+answers or a cheaper "router" model call, which add moving parts and, for
+the router, a call of their own. Cost: hard tasks hit a limit sooner;
+raise `LUNA_MAX_MODEL_CALLS` / `LUNA_TASK_BUDGET` for them.
+
+## D26 — The system prompt is built from persona settings; replies are short and spoken (2026-10-18, spec4 §4d)
+Luna is voice-first, but replies read like web pages: the researcher
+returned up to 300 words with URLs and the main agent recited them. The
+main agent's prompt is now assembled by `agent/persona.py` from small
+settings (`LUNA_RESPONSE_STYLE` concise/detailed, `LUNA_USER_TITLE`
+default "Sir", name, location, units, timezone) plus an optional
+free-form `config/persona.md` (git-ignored, appended last). Settings
+cover what every user changes and stay validated; the file covers
+everything else without new code. Only the main agent gets the persona:
+helpers return facts, and one place phrases the reply. The researcher
+now returns ≤ 60 words of facts with ≤ 2 URLs and searches with 3 results
+plus Tavily's own short answer (`include_answer`), which usually settles
+a factual question in one call. Chosen over post-processing replies
+(trimming, stripping markdown), which can't make a long answer short
+without another model call. Cost: the persona adds ~250 tokens to every
+main-agent call; in concise mode the user has to ask for detail.

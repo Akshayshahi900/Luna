@@ -41,15 +41,19 @@ voice-first web UI (`docs/web-ui.md`).
    `agent.astream(..., subgraphs=True)`; the CLI prints text, tool calls and
    helper steps (indented) as they arrive.
 3. Before every model call, in any agent, `TaskBudgetMiddleware` takes one unit.
-   The main agent sees its system prompt plus the scratchpad (todos + notes).
+   The main agent sees its system prompt (role + persona: style, "Sir",
+   user profile, `config/persona.md`; built by `agent/persona.py`) plus the
+   scratchpad (todos + notes).
 4. The model either answers, calls a direct tool, or calls `ask_<helper>`.
-   A helper runs its own capped loop and returns ≤ 300 words.
+   A helper runs its own capped loop and returns ≤ 300 words (the
+   researcher: ≤ 60 words of facts; the main agent phrases the reply).
 5. A risky tool (write, edit, run, send…) or `ask_user` pauses the graph. The
    run ends; `run_task` returns the pending pauses from `aget_state()`.
 6. `run_turn` asks you, then calls `run_task` again with
    `Command(resume={id: answer})` and the same budget. Repeat until no pauses.
 7. The checkpointer has saved messages, scratchpad and any paused helper
-   state under the thread id; old messages get summarized past 12k tokens.
+   state under the thread id; old messages get summarized past 12k tokens
+   (the newest ~4k tokens stay word-for-word, so summaries stay rare).
 
 The web path is the same loop split over socket messages: `message` →
 steps 1–5, the pauses go to the browser as `pause`, and `resume` is step 6.
@@ -72,6 +76,7 @@ src/luna/
     builder.py             build_agent (model, checkpointer, MCP) → assemble_agent (tools,
                            middleware, delegates); assemble again = switch model
     providers.py           OpenRouter / Groq / Ollama → ChatOpenAI; list models
+    persona.py             build_system_prompt: role + reply style + title + user profile + persona file
     runner.py              run_task: one run with budget + event stream + pending pauses
     budget.py              TaskBudget + TaskBudgetMiddleware
     scratchpad.py          notes state, write_note, ScratchpadMiddleware
@@ -91,6 +96,7 @@ src/luna/
     registry.py            ToolRegistry
   mcp/loader.py            read MCP config, split_by_agent, is_risky_tool_name
 config/mcp_servers.json    MCP servers: demo (main), tasks (assistant), LangChain docs (researcher)
+config/persona.md          optional extra instructions for Luna (git-ignored; see persona.example.md)
 servers/demo_mcp_server.py sample MCP server
 servers/tasks_mcp_server.py local to-dos (data/tasks.json) for ask_assistant
 tests/                     pytest suite (fake models, no API key)

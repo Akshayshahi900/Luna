@@ -63,3 +63,26 @@ async def test_cli_shows_limit_notice(make_looping_model, capsys):
     await stream_reply(_agent(make_looping_model(), settings), "loop", "t", recursion_limit(settings))
 
     assert "⚠ Model call limits exceeded" in capsys.readouterr().out
+
+
+def test_defaults_keep_api_calls_low():
+    s = Settings(_env_file=None, openrouter_api_key="test")
+    assert (s.max_model_calls, s.max_tool_calls, s.task_budget) == (10, 20, 30)
+    assert s.model_max_retries == 1
+
+
+def test_summary_keeps_tokens_below_the_trigger(make_fake_model):
+    from langchain.agents.middleware import SummarizationMiddleware
+
+    from luna.agent.builder import summary_keep_tokens
+
+    def settings(trigger):
+        return Settings(_env_file=None, openrouter_api_key="test", summary_trigger_tokens=trigger)
+
+    # Keeping more than the trigger would re-summarize on every model call.
+    assert summary_keep_tokens(settings(12000)) == 4000
+    assert summary_keep_tokens(settings(6000)) == 3000
+
+    middleware = build_middleware(settings(12000), make_fake_model("ok"))
+    (summarizer,) = [m for m in middleware if isinstance(m, SummarizationMiddleware)]
+    assert summarizer.keep == ("tokens", 4000)

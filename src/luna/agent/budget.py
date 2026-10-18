@@ -3,7 +3,7 @@ Task budget — one model-call allowance shared by the main agent and all subage
 
 BEGINNER MAP
 ------------
-Each agent already has its own loop limit (e.g. main 25, researcher 10).
+Each agent already has its own loop limit (e.g. main 10, researcher 5).
 But the main agent can call several subagents, each using its full limit,
 so the worst case multiplies. The task budget caps the TOTAL number of
 model calls for one user message, across every agent.

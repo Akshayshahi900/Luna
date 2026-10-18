@@ -74,7 +74,7 @@ class SubagentSpec:
     system_prompt: str
     tools: list[Any] = field(default_factory=list)
     model: Any | None = None
-    max_model_calls: int = 10
+    max_model_calls: int = 6
     timeout_seconds: float = 120.0
     interrupt_on: dict[str, Any] = field(default_factory=dict)
     middleware: list[Any] = field(default_factory=list)

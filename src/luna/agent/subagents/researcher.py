@@ -3,7 +3,7 @@ Researcher subagent — web search and reading pages (Tavily).
 
 Why a subagent (spec2 rule 1): research is noisy and multi-step. Several
 searches and long pages stay in the researcher's own context; the main
-agent only gets the short, sourced answer.
+agent only gets the key facts (≤ 60 words) and a source or two.
 
 Enabled only when LUNA_TAVILY_API_KEY is set. All tools are read-only, so
 nothing here needs human approval.
@@ -21,11 +21,18 @@ from luna.tools.limits import cap_output
 RESEARCHER_PROMPT = """
 You are Luna's research helper. Answer the task using the web.
 
-- Start with tavily_search. Run several focused searches rather than one vague one.
-- Use tavily_extract on the most promising URLs when snippets are not enough.
+- Every step costs an API request, so be brief: one or two focused tavily_search
+  calls usually suffice. When you need several searches, make them in the same step.
+- Use tavily_extract only when the snippets truly are not enough, on one or two URLs.
+- Answer as soon as you have enough; do not keep searching to be thorough.
 - Prefer recent, primary sources. Note dates when they matter.
-- If sources disagree or you are unsure, say so.
-- Reply in at most 300 words: the answer first, then a "Sources:" list of URLs.
+- tavily_search returns a short "answer" next to the results; if it answers the
+  task, use it and stop.
+- If sources disagree or you are unsure, say so in a few words.
+- Your reply is turned into one or two spoken sentences, so return only the facts
+  that answer the task (numbers with units, names, dates), at most 60 words, no
+  background or filler. If the task asks for a detailed report, up to 300 words is fine.
+- End with a "Sources:" line of at most two URLs.
 """.strip()
 
 DESCRIPTION = (
@@ -45,11 +52,21 @@ def researcher_spec(settings: Settings) -> SubagentSpec | None:
         description=DESCRIPTION,
         system_prompt=RESEARCHER_PROMPT,
         tools=[
-            cap_output(TavilySearch(max_results=5, tavily_api_key=key)),
+            # Fewer, shorter results plus Tavily's own one-paragraph answer:
+            # most questions are settled by the answer alone (less noise, fewer calls).
+            cap_output(
+                TavilySearch(
+                    max_results=3,
+                    include_answer="basic",
+                    search_depth="basic",
+                    tavily_api_key=key,
+                ),
+                max_chars=4000,
+            ),
             cap_output(TavilyExtract(extract_depth="basic", tavily_api_key=key)),
             calculator,
         ],
-        max_model_calls=10,
+        max_model_calls=5,
         timeout_seconds=180,
     )
 

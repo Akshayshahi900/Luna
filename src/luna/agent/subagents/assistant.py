@@ -51,7 +51,7 @@ def assistant_spec(settings: Settings, mcp_tools: list[Any]) -> SubagentSpec | N
         system_prompt=ASSISTANT_PROMPT,
         tools=[*mcp_tools, get_current_time],
         interrupt_on=needs_approval(risky, settings.auto_approve),
-        max_model_calls=10,
+        max_model_calls=5,
         timeout_seconds=180,
     )
 

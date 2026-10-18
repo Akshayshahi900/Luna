@@ -147,6 +147,34 @@ formats the CLI produces, so the agent can't tell the two apart.
   written), "Luna, cancel" mid-tool (tool cancelled), "switch to Groq",
   "start a new conversation".
 
+## 4d. Spoken persona: short replies, "Sir", user profile (added 2026-10-18)
+
+Luna's replies are mostly heard, not read, and web results made them long
+and noisy. The main agent's system prompt is now built by
+`luna/agent/persona.py` `build_system_prompt(settings)` (DECISIONS D26):
+
+- `LUNA_SYSTEM_PROMPT` (role) + style + address + profile + persona file.
+- **Style** `LUNA_RESPONSE_STYLE`: `concise` (default; one or two spoken
+  sentences, answer first, no lists/markdown/URLs unless asked, detail only
+  on request) or `detailed`.
+- **Address** `LUNA_USER_TITLE` (default `Sir`, once per reply); empty →
+  by `LUNA_USER_NAME` now and then, or not at all.
+- **Profile**: `LUNA_USER_NAME`, `LUNA_USER_LOCATION` (default place for
+  weather/local questions), `LUNA_UNITS` (`metric`/`imperial`),
+  `LUNA_TIMEZONE` (passed to `get_current_time`). The agent hands place and
+  units on to helpers in the delegate call.
+- **Persona file** `LUNA_PERSONA_PATH` (default `config/persona.md`,
+  git-ignored; template `config/persona.example.md`): free-form extra
+  instructions appended last. Missing file = nothing added.
+- **Researcher** returns facts only (≤ 60 words, ≤ 2 URLs; 300 words only
+  when a report is asked for). Tavily search: 3 results, `include_answer`
+  ("basic"), output capped at 4000 chars.
+- Only the main agent gets the persona; helpers return facts and the main
+  agent phrases the reply. Applies to the CLI too.
+- Example: "what's the weather?" with `LUNA_USER_LOCATION=Agra, India` →
+  "It's 33 degrees, Sir, with a 30 percent chance of rain."
+- Tests: `tests/test_persona.py`.
+
 ## 5. Verification
 
 - `tests/test_web.py`: translator, pause description/answers, origin check,

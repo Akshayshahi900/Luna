@@ -33,6 +33,7 @@ from langchain.agents.middleware import (
 
 from luna.agent.budget import TaskBudgetMiddleware
 from luna.agent.memory import create_checkpointer
+from luna.agent.persona import build_system_prompt
 from luna.agent.providers import make_model
 from luna.agent.scratchpad import ScratchpadMiddleware
 from luna.agent.subagents import get_subagent_specs, make_delegate_tool, needs_approval
@@ -116,7 +117,9 @@ def build_middleware(
       that pause for the user's OK before running.
     - Summarization: replaces old messages with a short summary so long
       threads don't grow forever. The scratchpad is state, not messages,
-      so it survives this.
+      so it survives this. It keeps a token amount (at most half the
+      trigger) rather than a message count: if the kept messages alone
+      passed the trigger, every model call would pay for a new summary.
     """
     middleware: list[Any] = [
         TaskBudgetMiddleware(),
@@ -132,10 +135,15 @@ def build_middleware(
             SummarizationMiddleware(
                 model=model,
                 trigger=("tokens", settings.summary_trigger_tokens),
-                keep=("messages", settings.summary_keep_messages),
+                keep=("tokens", summary_keep_tokens(settings)),
             )
         )
     return middleware
+
+
+def summary_keep_tokens(settings: Settings) -> int:
+    """Tokens kept after summarizing, capped at half the trigger."""
+    return max(min(settings.summary_keep_tokens, settings.summary_trigger_tokens // 2), 1)
 
 
 def recursion_limit(settings: Settings) -> int:
@@ -220,7 +228,8 @@ async def assemble_agent(
     agent = create_agent(
         model=model,
         tools=registry.list_tools(),
-        system_prompt=settings.system_prompt,
+        # Role + speaking style + user profile (luna/agent/persona.py).
+        system_prompt=build_system_prompt(settings),
         checkpointer=checkpointer,
         middleware=middleware,
         name="luna",
@@ -235,4 +244,5 @@ __all__ = [
     "build_tool_registry",
     "load_mcp_groups",
     "recursion_limit",
+    "summary_keep_tokens",
 ]

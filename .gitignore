@@ -11,3 +11,6 @@ data/
 *.sqlite-*
 .DS_Store
 workspace/
+
+# Personal instructions for Luna (see config/persona.example.md)
+config/persona.md

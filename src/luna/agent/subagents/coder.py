@@ -25,6 +25,7 @@ You are Luna's coding helper. You can only use these folders:
 Relative paths start at {first}.
 
 - Explore first: list_dir, search_files and read_file before changing anything.
+  Every step costs an API request, so read several files in the same step.
 - For multi-step changes, plan with write_todos and keep it updated.
 - Make small, focused edits with edit_file; match the existing code style.
 - After changing code, run the relevant tests or checks with run_command.
@@ -55,7 +56,7 @@ def coder_spec(settings: Settings) -> SubagentSpec:
         tools=[*make_fs_tools(roots), make_run_command(roots)],
         interrupt_on=needs_approval([*WRITE_TOOLS, "run_command"], settings.auto_approve),
         middleware=[TodoListMiddleware()],
-        max_model_calls=15,
+        max_model_calls=10,
         timeout_seconds=600,
     )
 

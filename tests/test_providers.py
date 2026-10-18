@@ -66,3 +66,9 @@ async def test_list_models_reads_the_models_endpoint(monkeypatch):
     )
     assert await list_models(_settings(groq_api_key="gq"), "groq") == ["a", "b"]
     assert seen == {"url": "https://api.groq.com/openai/v1/models", "auth": "Bearer gq"}
+
+
+def test_make_model_uses_few_retries():
+    # Each retry is another API request, so Luna retries once by default.
+    assert make_model(_settings()).max_retries == 1
+    assert make_model(_settings(model_max_retries=0)).max_retries == 0
