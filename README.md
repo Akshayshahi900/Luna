@@ -55,6 +55,13 @@ with Piper (models download once, ~200 MB). Turn on **WAKE** and say
 between OpenRouter, Groq and Ollama models. Details and dev
 setup: [`docs/web-ui.md`](docs/web-ui.md).
 
+### From your phone (Telegram)
+
+Create a bot with @BotFather, set `LUNA_TELEGRAM_BOT_TOKEN` and your user
+id in `LUNA_TELEGRAM_ALLOWED_USERS`, and run `luna-web`. Then send Luna
+text, **voice notes** (answered by voice), photos or files, and approve her
+actions with a tap. Setup: [`docs/messaging.md`](docs/messaging.md).
+
 The files and coder helpers only touch `./workspace` unless you set
 `LUNA_WORKSPACE_DIRS`. When Luna wants to write, edit or run something you
 get `[a]pprove / [e]dit / [r]eject`.

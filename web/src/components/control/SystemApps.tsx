@@ -149,6 +149,7 @@ const GENERAL: [string, string, string][] = [
   ["memory", "Memory", "Conversation storage, summarizing, and long-term memory."],
   ["voice", "Voice", "Speech output (Piper) and input (Whisper)."],
   ["routines", "Routines", "The scheduler and where routines are stored."],
+  ["messaging", "Messaging", "Use Luna from Telegram: text, voice notes, photos, files and approvals (docs/messaging.md)."],
 ];
 
 export function General({ schema, onSaved }: FormProps) {

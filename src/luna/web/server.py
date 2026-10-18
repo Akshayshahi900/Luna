@@ -50,6 +50,10 @@ and routines. Routines (luna/routines/) run in the background while the
 server runs; each result goes to every tab as {"type": "routine_result"},
 and saved settings as {"type": "settings_changed"}.
 
+Telegram (luna/channels/): with LUNA_TELEGRAM_BOT_TOKEN set, a bot runs
+alongside the tabs on the same AgentHost, so you can message Luna (text,
+voice notes, photos, files) and approve her actions from your phone.
+
 SECURITY: the agent can write files and (after approval) run commands, and
 any web page you visit could try to open ws://127.0.0.1:8765. So the socket
 only accepts browsers whose Origin is this server itself or one listed in
@@ -88,7 +92,12 @@ from luna.agent.runner import run_task
 from luna.agent.sessions import delete_session, list_sessions, new_session_id
 from luna.cli.chat import agent_tool_names
 from luna.config import Settings, get_settings
-from luna.config.settings import DEFAULT_DASHBOARD_PATH, DEFAULT_ENV_PATH, PROJECT_ROOT
+from luna.config.settings import (
+    DEFAULT_DASHBOARD_PATH,
+    DEFAULT_ENV_PATH,
+    DEFAULT_TELEGRAM_STATE_PATH,
+    PROJECT_ROOT,
+)
 from luna.routines import RoutineScheduler, RoutineStore, make_executor
 from luna.voice.stt import create_stt, wav_to_samples
 from luna.voice.tts import MAX_TEXT_CHARS, create_tts
@@ -154,6 +163,7 @@ class AgentHost:
         self.mcp_errors: dict[str | None, str] = {}  # helper tag → why its MCP group failed
         self.routines: RoutineStore | None = None  # routines + usage counters
         self.scheduler: RoutineScheduler | None = None
+        self.telegram: Any = None  # TelegramBridge (luna/channels/telegram.py), if a bot token is set
         # Model / tool calls and errors since startup (per day in self.routines).
         self.usage = {"runs": 0, "model_calls": 0, "tool_calls": 0, "errors": 0}
 
@@ -700,12 +710,14 @@ def create_app(
     mcp_groups: dict[str | None, list[Any]] | None = None,
     env_path: Path | str | None = None,
     dashboard_path: Path | str | None = None,
+    telegram_state_path: Path | str | None = None,
 ) -> Starlette:
     """Build the web app. Pass ``agent`` (and optionally ``rebuild`` /
     ``tts_engine`` / ``stt_engine`` / ``memory_store`` / ``routine_store`` /
     ``mcp_groups``) to skip building the real ones (tests do). ``env_path``
     and ``dashboard_path`` are where the Control Center saves (default: the
-    project's .env and data/dashboard.json)."""
+    project's .env and data/dashboard.json); ``telegram_state_path`` is the
+    Telegram bot's state file (default data/telegram.json)."""
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -725,6 +737,10 @@ def create_app(
         app.state.host = host
         init_control_state(app.state, env_path or DEFAULT_ENV_PATH, dashboard_path or DEFAULT_DASHBOARD_PATH)
         _start_routines(host, routines)
+        # Imported here: luna.channels.telegram imports this module.
+        from luna.channels import start_telegram
+
+        host.telegram = start_telegram(host, telegram_state_path or DEFAULT_TELEGRAM_STATE_PATH)
         # Load the voice models in the background so startup stays fast.
         warm = [asyncio.create_task(e.warm_up()) for e in (host.tts, host.stt) if e is not None]
         try:
@@ -732,6 +748,8 @@ def create_app(
         finally:
             for task in warm:
                 task.cancel()
+            if host.telegram is not None:
+                await host.telegram.stop()
             if host.scheduler is not None:
                 await host.scheduler.stop()
             if agent is None:

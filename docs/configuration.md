@@ -132,6 +132,18 @@ Scheduled jobs that run inside `luna-web` ([`control-center.md`](control-center.
 | `LUNA_ROUTINES_ENABLED` | `true` | Run scheduled routines while luna-web runs |
 | `LUNA_ROUTINES_PATH` | `data/luna_routines.sqlite` | Routines, their runs and API usage counters |
 
+## Messaging (Telegram)
+
+Use Luna from your phone ([`messaging.md`](messaging.md)). The bot runs inside `luna-web`.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LUNA_TELEGRAM_BOT_TOKEN` | unset (off) | Bot token from @BotFather (restart to apply) |
+| `LUNA_TELEGRAM_ALLOWED_USERS` | empty | Comma-separated Telegram user ids allowed to use the bot |
+| `LUNA_TELEGRAM_VOICE_REPLIES` | `true` | Answer voice notes with a voice note (Piper) |
+| `LUNA_TELEGRAM_ROUTINE_ALERTS` | `true` | Send routine results with notifications on to the allowed users |
+| `LUNA_MODEL_VISION` | `false` | The model can see images: Telegram photos go to it as images |
+
 Every setting on this page can also be changed in the web UI's Control
 Center, which writes `.env` in place (comments kept) and says whether a
 change applies at once or after a restart.
@@ -143,5 +155,5 @@ change applies at once or after a restart.
 | `.env` | your keys and overrides | no |
 | `config/mcp_servers.json` | MCP servers | yes |
 | `config/persona.md` | personal instructions | no |
-| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models, routines, `dashboard.json` (HUD widget preferences), `app-window/` (the app window's browser profile) | no |
-| `workspace/` | default sandbox for the files / coder helpers | no |
+| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models, routines, `dashboard.json` (HUD widget preferences), `app-window/` (the app window's browser profile), `telegram.json` (bot update offset, chat → thread) | no |
+| `workspace/` | default sandbox for the files / coder helpers; `workspace/telegram/` holds photos and files sent over Telegram | no |

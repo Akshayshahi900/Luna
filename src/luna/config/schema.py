@@ -41,7 +41,7 @@ ENV_PREFIX = "LUNA_"
 GROUPS: list[tuple[str, str, list[str]]] = [
     ("models", "Model providers", [
         "provider", "model_name", "openrouter_api_key", "groq_api_key", "groq_model",
-        "ollama_base_url", "ollama_model", "model_max_retries",
+        "ollama_base_url", "ollama_model", "model_max_retries", "model_vision",
     ]),
     ("persona", "Persona", [
         "system_prompt", "response_style", "user_title", "user_name", "user_location",
@@ -71,9 +71,12 @@ GROUPS: list[tuple[str, str, list[str]]] = [
         "stt_engine", "stt_model", "stt_models_dir", "stt_threads",
     ]),
     ("routines", "Routines", ["routines_enabled", "routines_path"]),
+    ("messaging", "Messaging (Telegram)", [
+        "telegram_bot_token", "telegram_allowed_users", "telegram_voice_replies", "telegram_routine_alerts",
+    ]),
 ]
 
-SECRETS = frozenset({"openrouter_api_key", "groq_api_key", "tavily_api_key", "mail_password"})
+SECRETS = frozenset({"openrouter_api_key", "groq_api_key", "tavily_api_key", "mail_password", "telegram_bot_token"})
 
 CHOICES: dict[str, list[str]] = {
     "provider": ["openrouter", "groq", "ollama"],
@@ -85,14 +88,19 @@ CHOICES: dict[str, list[str]] = {
     "stt_engine": ["whisper", "browser"],
 }
 
-# Read fresh by the MCP servers on every tool call (servers/*_mcp_server.py).
-_LIVE = {f for _, _, fields in GROUPS if _ in {"mail", "google"} for f in fields}
+# Read fresh by the MCP servers on every tool call (servers/*_mcp_server.py),
+# and by the Telegram bot on every message (luna/channels/telegram.py).
+_LIVE = (
+    {f for group, _, fields in GROUPS if group in {"mail", "google", "messaging"} for f in fields}
+    - {"telegram_bot_token"}
+) | {"model_vision"}
 # Opened once at startup.
 _RESTART = {
     "provider", "model_name", "memory_backend", "checkpoint_path", "enable_longterm_memory",
     "longterm_memory_path", "mcp_config_path", "enable_mcp_tools", "web_host", "web_port",
     "web_allowed_origins", "web_open_window", "web_close_with_window", "web_browser", "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale",
     "stt_engine", "stt_model", "stt_models_dir", "stt_threads", "routines_enabled", "routines_path",
+    "telegram_bot_token",  # the bot starts with luna-web (luna/channels/telegram.py)
 }
 
 

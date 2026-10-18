@@ -12,6 +12,7 @@ Website: <https://akshayshahi900.github.io/Luna/> (source in [`site/`](../site/)
 - [Memory](memory.md): short-term threads and long-term memory
 - [Google](google.md): Gmail, Calendar and Google Tasks sign-in
 - [Mail](mail.md): Gmail API or IMAP/SMTP
+- [Messaging](messaging.md): use Luna from Telegram (voice notes, photos, approvals)
 
 ## Working on Luna
 

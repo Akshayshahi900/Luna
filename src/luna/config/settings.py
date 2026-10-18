@@ -44,6 +44,7 @@ DEFAULT_GOOGLE_DIR = PROJECT_ROOT / "data" / "google"
 DEFAULT_ROUTINES_PATH = PROJECT_ROOT / "data" / "luna_routines.sqlite"
 DEFAULT_DASHBOARD_PATH = PROJECT_ROOT / "data" / "dashboard.json"
 DEFAULT_ENV_PATH = PROJECT_ROOT / ".env"
+DEFAULT_TELEGRAM_STATE_PATH = PROJECT_ROOT / "data" / "telegram.json"
 
 
 class Settings(BaseSettings):
@@ -88,6 +89,13 @@ class Settings(BaseSettings):
         description=(
             "How often a failed model request (rate limit, network) is retried. "
             "Each retry is another API request."
+        ),
+    )
+    model_vision: bool = Field(
+        default=False,
+        description=(
+            "The model can see images: photos sent over Telegram go to it as images. "
+            "Off = they are only saved to the workspace"
         ),
     )
 
@@ -387,6 +395,32 @@ class Settings(BaseSettings):
         default=DEFAULT_ROUTINES_PATH,
         description="SQLite file for routines, their runs and API usage counters",
     )
+
+    # --- Messaging (luna/channels/; docs/messaging.md) ---
+    # Control Luna from your phone over Telegram while luna-web runs.
+    telegram_bot_token: str | None = Field(default=None, repr=False)  # from @BotFather; unset = off
+    telegram_allowed_users: Annotated[list[int], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Comma-separated Telegram user ids that may use the bot. Empty = nobody "
+            "(the bot replies with your id so you can add it)"
+        ),
+    )
+    telegram_voice_replies: bool = Field(
+        default=True,
+        description="Answer a voice note with a voice note too (needs Piper, LUNA_TTS_ENGINE=piper)",
+    )
+    telegram_routine_alerts: bool = Field(
+        default=True,
+        description="Send routine results (with notifications on) to the allowed Telegram users",
+    )
+
+    @field_validator("telegram_allowed_users", mode="before")
+    @classmethod
+    def _split_user_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [int(part) for part in value.replace(" ", "").split(",") if part]
+        return value
 
     @field_validator("stt_engine")
     @classmethod

@@ -28,7 +28,7 @@ Design: [`spec/spec8.md`](../spec/spec8.md). Decisions: D34–D36 in
 | **Routines** | <ul><li>Switch the insight checks on.</li><li>Create agent routines (a prompt on a schedule).</li><li>Edit schedules (with presets and a live preview), run now, and see run history.</li></ul> |
 | **Dashboard** | The HUD widgets: which show, which corner, compact or minimal, opacity, and whether the keyboard hint line shows. |
 | **Gateway** | <ul><li>The page and WebSocket addresses and a health check.</li><li>Host, port and allowed origins.</li><li>The app window settings (open on start, quit when closed, which browser).</li><li>A warning if Luna listens beyond this computer.</li></ul> |
-| **General** | Persona, memory, voice and routine settings. |
+| **General** | Persona, memory, voice, routine and messaging (Telegram, [`messaging.md`](messaging.md)) settings. |
 | **All settings** | Every `LUNA_*` setting with search. Also offers to remove keys Luna no longer reads (e.g. `LUNA_DEFAULT_THREAD_ID`). |
 
 ## Saving settings

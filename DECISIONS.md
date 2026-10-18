@@ -501,3 +501,62 @@ Ruled out:
   live in `docs/` on GitHub.
 - A route inside `web/`. Invisible unless Luna is running.
 - A router or UI library. One page doesn't need them.
+
+## D39 — Telegram is the first chat channel, run inside luna-web over long polling (2026-10-18, spec11)
+You can message Luna from your phone and get text, voice notes, photos,
+files and approvals. Details (`src/luna/channels/`):
+- **Telegram first:** the Bot API is free and official, handles voice,
+  photos, files and inline buttons, and needs nothing but a token from
+  @BotFather.
+- **Long polling, not webhooks:** Luna asks Telegram for updates
+  (`getUpdates`), so no public URL, tunnel or open port is needed.
+  `data/telegram.json` stores the update offset (saved *before* an update
+  is handled, so a crash never repeats a command) and each chat's thread.
+- **Inside luna-web, on the shared AgentHost:** same agent, memory, MCP
+  tools and usage stats as the tabs. A model switch or settings save
+  applies to the bot too. Routine results reach it as a host listener.
+  Runs headless with `luna-web --no-window`.
+- **One private chat = one Chat (like a tab), on one persistent thread**
+  until `/new`. The thread is an ordinary session, so the web UI lists it.
+- **Approvals keep D9:** a pause becomes a card with Approve / Reject
+  buttons. The button data carries a prefix of the pause id, so old
+  buttons stay valid across a restart (pauses live in the checkpoint) and
+  stale ones are refused. Text or voice works too: "yes" / "no" are
+  decisions, and anything else rejects *with that text as the reason*, so
+  Luna can retry your way. Edit isn't offered: there's no form for it in
+  a chat.
+- **Allow-list by user id, private chats only:** strangers get their own
+  id back (so the owner can find theirs) and nothing else. Groups are
+  ignored. An empty list means nobody.
+- **Media, all local:** voice notes are decoded with PyAV (already
+  installed by faster-whisper; its own `decode_audio` breaks on PyAV 19)
+  and transcribed by the same Whisper. Replies to voice notes also come
+  as a Piper voice note (WAV → OGG/Opus). Photos and files are saved to
+  `workspace/telegram/` so the helpers can use them. Photos go to the
+  model as image blocks only with `LUNA_MODEL_VISION=true`, because
+  text-only models reject them.
+- **Reply sent when the run ends,** not streamed: Telegram has no cheap
+  token streaming, and editing a message per token would hit rate limits.
+  "typing…" shows meanwhile.
+- **Messages older than 15 minutes are skipped** (Luna was off): running
+  "send the report" hours late is worse than asking again.
+- **No bot framework:** five Bot API calls over httpx (already a
+  dependency). The token is scrubbed from every error message.
+- **Telegram options are live settings:** a new allowed user applies
+  without a restart. Only the token needs one. Fixing this exposed a bug:
+  the `_LIVE` set in `config/schema.py` reused `_` as two loop variables,
+  so mail and Google settings were never "live" either. Fixed.
+
+Ruled out:
+- **WhatsApp now.** The Cloud API needs a Meta business account and a
+  public HTTPS webhook. The unofficial WhatsApp Web libraries break the
+  terms of service and risk a ban. Planned as a second bridge next to
+  `telegram.py` (spec11 §6).
+- **python-telegram-bot / aiogram.** A big framework with its own event
+  loop for five calls.
+- **A separate `luna-telegram` process.** It would mean a second agent
+  build, a second MCP fleet, and two writers on the same checkpoint
+  database.
+- **Auto-approving from Telegram,** or a separate allow-list of tools for
+  it. Approvals already work there, and one `LUNA_AUTO_APPROVE` is
+  easier to reason about.

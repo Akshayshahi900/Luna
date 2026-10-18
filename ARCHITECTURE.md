@@ -2,12 +2,15 @@
 
 Luna is a general assistant: one main ReAct agent that does quick work
 itself and hands bigger jobs to helper subagents. Design history is in
-`spec/` (spec1 → spec10); decisions and their reasons in `DECISIONS.md`.
+`spec/` (spec1 → spec11); decisions and their reasons in `DECISIONS.md`.
 Two front doors share the same agent code: the terminal CLI and a
 voice-first web UI (`docs/web-ui.md`). The web UI also has a Control
 Center for settings, connectors, permissions, routines and live stats
 (`docs/control-center.md`). `luna-web` opens the UI in its own app
-window, like a desktop application (`web/window.py`, D37).
+window, like a desktop application (`web/window.py`, D37). A third
+front door, a Telegram bot (`channels/`, D39), runs inside `luna-web` so
+you can message Luna from your phone: text, voice notes, photos and
+approvals (`docs/messaging.md`).
 
 ## Topology
 
@@ -16,6 +19,9 @@ window, like a desktop application (`web/window.py`, D37).
  you ── CLI (cli/chat) ──▶ run_turn → run_task (agent/runner)          │
  you ── browser (web/) ──▶ /ws → Session (web/server) → run_task       │
         voice in/out,     │   events → JSON (web/events)                │
+ you ── Telegram ────────▶ long poll → Chat (channels/telegram)         │
+        text, voice note, │   → run_task; reply text (+ Piper voice     │
+        photo, file       │   note), Approve / Reject buttons           │
    ▲     approve/edit/    │   TaskBudget for the whole message          │
    │     reject, answers  └──────────────────┬─────────────────────────┘
    │                                         ▼
@@ -42,6 +48,7 @@ window, like a desktop application (`web/window.py`, D37).
           · data/luna_routines.sqlite (routines, runs, usage counters)
           · data/dashboard.json (HUD widget preferences)
           · data/app-window/ (the app window's browser profile)
+          · data/telegram.json (bot update offset, chat → thread id)
 
  Control Center (luna-web only): browser #/control ── /api/control/* (web/control.py)
    settings ⇄ .env (config/envfile.py + schema.py; validated, rolled back on error)
@@ -97,6 +104,17 @@ helper run's metadata) so the HUD can nest them, and each run ends with a
 asyncio task, which stops any helpers inside it.
 Protocol: `docs/web-ui.md`.
 
+Telegram (`channels/telegram.py`): one private chat = one Chat, like a tab.
+A message is downloaded and turned into text (voice notes go through
+Whisper, photos and files are saved to `workspace/telegram/`; photos also
+go in as image blocks when `LUNA_MODEL_VISION=true`) and run with
+`run_task`. The reply is the main agent's `token` text, sent when the run
+ends (plus a Piper voice note when the message was a voice note). Pauses
+become a card with Approve / Reject buttons (`callback_data` holds a prefix
+of the pause id), or the next text reply answers them. Only users in
+`LUNA_TELEGRAM_ALLOWED_USERS` reach the agent. Routine results reach the
+bot as an AgentHost listener.
+
 ## Files
 
 ```
@@ -117,6 +135,14 @@ src/luna/
                            profile, stop the server when it closes, .desktop launcher entry
     control.py             /api/control/*: settings, MCP connectors, Google connect, providers,
                            permissions, stats, dashboard prefs, routines, cron check
+  channels/
+    telegram.py            TelegramBridge (luna-web starts it when LUNA_TELEGRAM_BOT_TOKEN is set):
+                           long-poll loop, allow-list, Chat per private chat, voice / photo / file
+                           intake, approvals (buttons or "yes"/"no"/reason), /new /stop /help,
+                           routine alerts
+    telegram_api.py        TelegramAPI: the few Bot API calls over httpx; token kept out of errors
+    media.py               decode_audio (voice note → 16 kHz), wav_to_ogg_opus (Piper → voice note),
+                           pick_photo, split_text (4096-char limit), safe_filename
   config/settings.py       all LUNA_* settings
   config/envfile.py        read / edit .env in place (comments kept, atomic)
   config/schema.py         settings → grouped form schema (secrets masked, live/rebuild/restart);
@@ -180,6 +206,7 @@ docs/web-ui.md             running the web UI, WebSocket protocol
 docs/control-center.md     Control Center: apps, routines, what applies when, HTTP API
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
+docs/messaging.md          Telegram bot: setup, voice notes, photos, approvals, security
 docs/google.md             Google sign-in (Gmail, Calendar, Tasks), calendar tools, to-do sync, email → to-do / event
 site/                      product website (Vite + React): src/content.ts holds all copy,
                            src/sections/* lay it out, public/screens/ real screenshots
@@ -194,5 +221,6 @@ SECURITY.md
 
 ## Not built yet
 
-Voice in the CLI, a wake word that works without the web page open, and
-semantic (embedding) search for long-term memory.
+Voice in the CLI, a wake word that works without the web page open,
+semantic (embedding) search for long-term memory, and a WhatsApp channel
+(see spec11 §6).
