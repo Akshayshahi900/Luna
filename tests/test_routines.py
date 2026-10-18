@@ -14,7 +14,7 @@ import pytest
 from conftest import tool_call
 from luna.config import Settings
 from luna.routines.agent import REJECTED, auto_answer, routine_thread, run_agent_routine
-from luna.routines.builtin import BUILTINS, decode_tool_output, run_builtin
+from luna.routines.builtin import BUILTINS, decode_tool_output, find_tool, run_builtin
 from luna.routines.scheduler import RoutineScheduler, make_executor
 from luna.routines.store import KEEP_RUNS, RoutineRefused, RoutineStore
 
@@ -192,6 +192,16 @@ async def test_missing_tool_is_skipped_and_errors_are_caught():
 
     status, summary, _ = await run_builtin("todos", {"list_tasks": list_tasks}, NOW)
     assert status == "error" and "server down" in summary
+
+
+async def test_builtins_find_server_prefixed_tools():
+    """Several MCP servers on one helper: the adapter names tools <server>_<tool>."""
+    prefixed = {f"mail_{name}": t for name, t in TOOLS.items()}
+    assert find_tool(prefixed, "list_inbox") is TOOLS["list_inbox"]
+    assert find_tool(TOOLS, "list_inbox") is TOOLS["list_inbox"]  # exact name wins
+    assert find_tool({"a_list_tasks": 1, "b_list_tasks": 2}, "list_tasks") is None  # ambiguous
+    status, _, _ = await run_builtin("todos", {"tasks_list_tasks": TOOLS["list_tasks"]}, NOW)
+    assert status != "skipped"
 
 
 def test_decode_tool_output_shapes():

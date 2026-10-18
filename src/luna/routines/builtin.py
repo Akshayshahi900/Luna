@@ -216,6 +216,16 @@ BUILTINS: dict[str, BuiltinSpec] = {
 }
 
 
+def find_tool(tools: dict[str, Any], name: str) -> Any:
+    """The tool called ``name``, or ``<server>_<name>``: when one helper has
+    several MCP servers, the adapter prefixes each tool with its server's
+    name (e.g. ``mail_list_inbox``). None when missing or ambiguous."""
+    if name in tools:
+        return tools[name]
+    matches = [tool for key, tool in tools.items() if key.endswith(f"_{name}")]
+    return matches[0] if len(matches) == 1 else None
+
+
 async def run_builtin(
     key: str,
     tools: dict[str, Any],
@@ -228,7 +238,7 @@ async def run_builtin(
         return "error", f"Unknown built-in routine: {key}", None
     if is_risky_tool_name(spec.tool):  # guard: routines must never change anything
         return "error", f"{spec.tool} is not read-only", None
-    tool = tools.get(spec.tool)
+    tool = find_tool(tools, spec.tool)
     if tool is None:
         return "skipped", f"Not connected: no {spec.tool} tool (check MCP connectors).", None
     try:
@@ -238,4 +248,4 @@ async def run_builtin(
     return spec.collect(decode_tool_output(raw), now)
 
 
-__all__ = ["BUILTINS", "BuiltinSpec", "Result", "decode_tool_output", "run_builtin"]
+__all__ = ["BUILTINS", "BuiltinSpec", "Result", "decode_tool_output", "find_tool", "run_builtin"]
