@@ -40,6 +40,8 @@ import warnings
 from pathlib import Path
 from typing import Any
 
+from luna.config.settings import PROJECT_ROOT
+
 
 def load_mcp_config(path: Path | str) -> dict[str, Any] | None:
     """Read mcp_servers.json. Return None if missing or has no servers."""
@@ -51,6 +53,11 @@ def load_mcp_config(path: Path | str) -> dict[str, Any] | None:
     servers = data.get("mcpServers") or {}
     if not servers:
         return None
+    # Relative paths in "args" (e.g. servers/demo_mcp_server.py) mean "from the
+    # project root", so run stdio servers there unless the entry sets its own cwd.
+    for server in servers.values():
+        if "command" in server:
+            server.setdefault("cwd", str(PROJECT_ROOT))
     return data
 
 
@@ -81,7 +88,7 @@ async def load_mcp_tools(config: dict[str, Any] | Path | str | None) -> list[Any
 
     # langchain.mcp is still labeled beta; avoid spamming the CLI with warnings.
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning, module="langchain")
+        warnings.filterwarnings("ignore", message=r".*langchain\.mcp.* is in beta")
         from langchain.mcp import MCPAdapter
 
     # Opening the adapter connects to the server(s).

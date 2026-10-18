@@ -19,9 +19,11 @@ Read next: luna/agent/memory.py and luna/tools/registry.py
 
 from __future__ import annotations
 
+import sys
 from typing import Any
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain_openai import ChatOpenAI
 
 from luna.agent.memory import create_checkpointer
@@ -48,8 +50,18 @@ async def build_tool_registry(settings: Settings | None = None) -> ToolRegistry:
 
     if settings.enable_mcp_tools:
         # May start MCP server subprocesses / open HTTP connections.
-        mcp_tools = await load_mcp_tools(settings.mcp_config_path)
-        registry.register_many(mcp_tools)
+        # A broken server should not stop Luna from starting: warn and carry on
+        # with whatever tools we already have.
+        try:
+            mcp_tools = await load_mcp_tools(settings.mcp_config_path)
+        except Exception as exc:  # noqa: BLE001 — any MCP failure is non-fatal
+            print(
+                f"Warning: could not load MCP tools ({exc}). "
+                "Continuing without them.",
+                file=sys.stderr,
+            )
+        else:
+            registry.register_many(mcp_tools)
 
     return registry
 
@@ -88,7 +100,7 @@ async def build_agent(
     )
 
     # 2) Notebook — stores message history per thread_id.
-    # Must be async (AsyncSqliteSaver) because the CLI uses agent.ainvoke().
+    # Must be async (AsyncSqliteSaver) because the CLI uses agent.astream().
     checkpointer = await create_checkpointer(
         backend=settings.memory_backend,
         path=settings.checkpoint_path,
@@ -97,13 +109,26 @@ async def build_agent(
     # 3) Hands — all callable tools.
     registry = await build_tool_registry(settings)
 
-    # 4) Wire everything into one agent graph.
+    # 4) Middleware — runs around each model call. Summarization replaces old
+    # messages with a short summary so long threads don't grow forever.
+    middleware = []
+    if settings.summary_trigger_tokens > 0:
+        middleware.append(
+            SummarizationMiddleware(
+                model=model,
+                trigger=("tokens", settings.summary_trigger_tokens),
+                keep=("messages", settings.summary_keep_messages),
+            )
+        )
+
+    # 5) Wire everything into one agent graph.
     # create_agent already implements the "think → tool → think → answer" loop.
     agent = create_agent(
         model=model,
         tools=registry.list_tools(),
         system_prompt=settings.system_prompt,
         checkpointer=checkpointer,
+        middleware=middleware,
         name="luna",
     )
     return agent, registry

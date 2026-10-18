@@ -12,8 +12,9 @@ environment variables that start with LUNA_:
   export LUNA_MEMORY_BACKEND=memory
   export LUNA_ENABLE_MCP_TOOLS=false
 
-Or put the same keys in a `.env` file in the project root.
-See config/env.example for a full list.
+Or put the same keys in a `.env` file in the project root
+(it is found no matter which directory you run `luna` from).
+See env.example for a full list.
 
 get_settings() is cached (lru_cache): the first call reads env/defaults;
 later calls reuse the same object for speed.
@@ -45,7 +46,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="LUNA_",
-        env_file=".env",
+        # Absolute path so `luna` works from any working directory.
+        env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",  # ignore unknown env vars instead of crashing
     )
@@ -60,9 +62,8 @@ class Settings(BaseSettings):
     system_prompt: str = Field(
         default=(
             "You are Luna, a helpful assistant. "
-            # "Use tools when they help you answer accurately. "
-            # "Remember prior turns in this conversation."
-            "use tools for answering the problems"
+            "Use tools when they help you answer accurately, "
+            "and remember prior turns in this conversation."
         ),
         description="Instructions the model always sees first",
     )
@@ -75,6 +76,18 @@ class Settings(BaseSettings):
     checkpoint_path: Path = Field(
         default=DEFAULT_CHECKPOINT_PATH,
         description="Where to store the SQLite memory file",
+    )
+
+    summary_trigger_tokens: int = Field(
+        default=12000,
+        description=(
+            "Summarize older messages once a thread's history passes this many "
+            "tokens (keeps cost and context size bounded). 0 disables."
+        ),
+    )
+    summary_keep_messages: int = Field(
+        default=20,
+        description="How many recent messages to keep word-for-word after summarizing",
     )
 
     # --- Tools ---

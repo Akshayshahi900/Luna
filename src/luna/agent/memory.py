@@ -11,7 +11,7 @@ Two backends:
   - "sqlite"  → file on disk (default). Survives restart.
   - "memory"  → RAM only. Forgotten when the process exits.
 
-IMPORTANT: the CLI uses ``await agent.ainvoke(...)`` (async).
+IMPORTANT: the CLI uses ``agent.astream(...)`` (async).
 SQLite memory must therefore be ``AsyncSqliteSaver``, not the sync
 ``SqliteSaver`` — otherwise you get:
   "The SqliteSaver does not support async methods."
@@ -68,7 +68,7 @@ async def create_checkpointer(
         # Make sure data/ exists before opening the DB file.
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Async connection — required because the CLI calls agent.ainvoke().
+        # Async connection — required because the CLI streams with agent.astream().
         conn = await aiosqlite.connect(str(checkpoint_path))
         _OPEN_CONNECTIONS.append(conn)
         saver = AsyncSqliteSaver(conn)
@@ -81,4 +81,10 @@ async def create_checkpointer(
     )
 
 
-__all__ = ["create_checkpointer"]
+async def close_checkpointers() -> None:
+    """Close any open SQLite connections. Call once when the app exits."""
+    while _OPEN_CONNECTIONS:
+        await _OPEN_CONNECTIONS.pop().close()
+
+
+__all__ = ["close_checkpointers", "create_checkpointer"]

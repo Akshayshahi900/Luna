@@ -10,11 +10,17 @@ Scalable LangGraph chatbot with conversation memory and pluggable tools
 uv sync
 
 # 2. Add your OpenRouter credentials to .env
-cp config/env.example .env
+cp env.example .env
 # Replace `your_openrouter_api_key_here` with your key in .env
 
 # 3. Chat
 uv run luna
+```
+
+Run the tests (no API key needed, the model is faked):
+
+```bash
+uv run pytest
 ```
 
 ## New here? Read this first
@@ -32,6 +38,6 @@ It explains, in plain English:
 
 ## Configuration
 
-See `config/env.example` and `config/mcp_servers.json`.
+See `env.example` and `config/mcp_servers.json`.
 
 Design / implementation notes: [`spec/spec1.md`](spec/spec1.md).

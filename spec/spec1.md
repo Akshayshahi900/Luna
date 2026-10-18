@@ -26,7 +26,7 @@ Build a Python chatbot on **LangGraph / LangChain** that:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  CLI (luna.cli.chat)                                    │
-│  thread_id  →  ainvoke(messages, config)                │
+│  thread_id  →  astream(messages, config)                │
 └───────────────────────────┬─────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────┐
@@ -85,12 +85,11 @@ src/luna/
     loader.py              # load MCPConfig JSON → LangChain tools
   cli/
     chat.py                # interactive REPL
-  core/
-    main.py                # legacy shim
+
+env.example                # documented env vars
 
 config/
   mcp_servers.json         # MCP server fleet (editable)
-  env.example              # documented env vars
 
 servers/
   demo_mcp_server.py       # sample local stdio MCP server
@@ -122,7 +121,8 @@ await agent.ainvoke(
 CLI commands:
 
 - `/new` — new UUID thread (fresh history key)
-- `/thread` — print current thread id
+- `/thread` — print current thread id (`/thread <id>` switches)
+- `/threads` — list saved threads
 
 ### 3.4 Tools — native path
 
@@ -184,7 +184,9 @@ Disable MCP without code changes: `LUNA_ENABLE_MCP_TOOLS=false`.
 uv run luna
 ```
 
-Commands: `/help`, `/tools`, `/thread`, `/new`, `/quit`.
+Commands: `/help`, `/tools`, `/thread [id]`, `/threads`, `/new`, `/quit`.
+
+Replies stream token by token; tool calls print as `→ name(args)` and results as `← ...`.
 
 ### 3.8 Sample MCP server
 
@@ -206,7 +208,7 @@ Commands: `/help`, `/tools`, `/thread`, `/new`, `/quit`.
 | `LUNA_ENABLE_MCP_TOOLS` | `true` | Discover MCP tools |
 | `LUNA_DEFAULT_THREAD_ID` | `default` | Initial chat thread |
 
-Copy `config/env.example` → `.env` to customize.
+Copy `env.example` → `.env` to customize.
 
 ---
 
@@ -280,7 +282,7 @@ Natural next steps (not implemented in spec1):
 | `README.md` | Quick start |
 | `.gitignore` | venv, data, env |
 | `config/mcp_servers.json` | Default MCP fleet |
-| `config/env.example` | Env documentation |
+| `env.example` | Env documentation |
 | `servers/demo_mcp_server.py` | Sample stdio MCP server |
 | `src/luna/**` | Application package |
 | `spec/spec1.md` | This specification |

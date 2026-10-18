@@ -59,12 +59,12 @@ You type ──► CLI ──► Agent (LangGraph) ──► Model (OpenRouter)
 ```
 Luna/
 ├── README.md                 ← how to run
+├── env.example               ← copy to .env for settings
 ├── spec/
 │   ├── spec1.md              ← what was built (design notes)
 │   └── beginner-guide.md     ← THIS FILE
 ├── config/
-│   ├── mcp_servers.json      ← which MCP tool-servers to connect
-│   └── env.example           ← copy ideas for .env settings
+│   └── mcp_servers.json      ← which MCP tool-servers to connect
 ├── servers/
 │   └── demo_mcp_server.py    ← tiny example MCP server (2 tools)
 └── src/luna/                 ← the actual app
@@ -272,7 +272,7 @@ export LUNA_ENABLE_MCP_TOOLS=false
 uv run luna
 ```
 
-Or put the same keys in a `.env` file (see `config/env.example`).
+Or put the same keys in a `.env` file (see `env.example`).
 
 Prefix is always `LUNA_`.
 

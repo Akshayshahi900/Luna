@@ -27,6 +27,25 @@ from zoneinfo import ZoneInfo
 
 from langchain.tools import tool
 
+# Limits so a request like 9**9**9**9 can't freeze the process.
+_MAX_EXPONENT = 1000
+_MAX_INT_DIGITS = 1000
+
+
+def _safe_pow(base: float | int, exponent: float | int) -> float | int:
+    """Like ``base ** exponent`` but refuses huge exponents."""
+    if abs(exponent) > _MAX_EXPONENT:
+        raise ValueError(f"Exponent too large (max {_MAX_EXPONENT})")
+    return operator.pow(base, exponent)
+
+
+def _check_size(value: float | int) -> float | int:
+    """Reject integers so big they would be slow to compute or print."""
+    if isinstance(value, int) and value.bit_length() > _MAX_INT_DIGITS * 4:
+        raise ValueError("Result too large")
+    return value
+
+
 # Maps AST operator node types → real Python math functions.
 # Used by the safe calculator so we never call eval() on raw user text.
 _BIN_OPS = {
@@ -36,7 +55,7 @@ _BIN_OPS = {
     ast.Div: operator.truediv,
     ast.FloorDiv: operator.floordiv,
     ast.Mod: operator.mod,
-    ast.Pow: operator.pow,
+    ast.Pow: _safe_pow,
 }
 _UNARY_OPS = {
     ast.UAdd: operator.pos,
@@ -55,9 +74,11 @@ def _safe_eval(node: ast.AST) -> float | int:
     if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
         return node.value
     if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
-        return _BIN_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+        return _check_size(
+            _BIN_OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
+        )
     if isinstance(node, ast.UnaryOp) and type(node.op) in _UNARY_OPS:
-        return _UNARY_OPS[type(node.op)](_safe_eval(node.operand))
+        return _check_size(_UNARY_OPS[type(node.op)](_safe_eval(node.operand)))
     raise ValueError("Only basic arithmetic is allowed")
 
 
