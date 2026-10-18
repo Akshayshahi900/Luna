@@ -17,6 +17,7 @@ import { Captions } from "./components/Captions";
 import { ChatDrawer } from "./components/ChatDrawer";
 import { CommandLine } from "./components/CommandLine";
 import { Dock } from "./components/Dock";
+import { MemoryPanel } from "./components/MemoryPanel";
 import { ModelSwitcher } from "./components/ModelSwitcher";
 import { ActivityFeed, Frame, SystemPanel, TopBar } from "./components/Hud";
 import { PauseCard } from "./components/PauseCard";
@@ -75,6 +76,7 @@ export default function App() {
   const [handsFree, setHandsFree] = useState(() => load("luna.handsFree", false));
   const [voiceOut, setVoiceOut] = useState(() => load("luna.voiceOut", true));
   const [drawer, setDrawer] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [typing, setTyping] = useState(false);
   const [switcher, setSwitcher] = useState(false);
   const [fault, setFault] = useState(false);
@@ -280,7 +282,10 @@ export default function App() {
           endFollow();
           return say("Going quiet. Press space when you need me.");
         }
-        if (cmd?.kind === "transcript") return setDrawer(cmd.open);
+        if (cmd?.kind === "transcript") {
+          setMemoryOpen(false);
+          return setDrawer(cmd.open);
+        }
       }
 
       const pause = s.pauses.find((p) => !(p.id in replies));
@@ -439,7 +444,23 @@ export default function App() {
     };
   }, [mic, speaker, voice]);
 
-  // Keyboard: Space talk, / type, T transcript, M model, Esc hush/close.
+  // The Memory panel shares the right edge with the transcript: one at a time.
+  const toggleDrawer = useCallback(() => {
+    setMemoryOpen(false);
+    setDrawer((v) => !v);
+  }, []);
+  const toggleMemory = useCallback(() => {
+    setDrawer(false);
+    setMemoryOpen((v) => !v);
+  }, []);
+
+  // Fresh list on open, and whenever Luna adds a suggestion while it's open.
+  useEffect(() => {
+    if (memoryOpen) send({ type: "memories" });
+  }, [memoryOpen, state.inbox, send]);
+
+  // Keyboard: Space talk, / type, T transcript, K memory, M model,
+  // Esc stops a running task (STOP), otherwise hushes Luna and closes panels.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!flags.current.booted) return;
@@ -453,9 +474,16 @@ export default function App() {
         e.preventDefault();
         setTyping(true);
       } else if (e.key.toLowerCase() === "t") {
-        setDrawer((v) => !v);
+        toggleDrawer();
+      } else if (e.key.toLowerCase() === "k" && stateRef.current.memoryOn) {
+        toggleMemory();
       } else if (e.key.toLowerCase() === "m") {
         setSwitcher((v) => !v);
+      } else if (e.key === "Escape" && stateRef.current.busy) {
+        // A run is in progress: stop it (and its helpers). Approvals and
+        // questions are not "running"; Esc keeps its old meaning for them.
+        speaker.stop();
+        send({ type: "cancel" }); // "cancelled" then flushes the rest of the reply
       } else if (e.key === "Escape") {
         speaker.stop();
         listener.abort();
@@ -465,12 +493,13 @@ export default function App() {
         }
         endFollow();
         setDrawer(false);
+        setMemoryOpen(false);
         setTyping(false);
       }
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [listener, speaker, voice, startListening, stopListening, endOneShot, endFollow]);
+  }, [listener, speaker, voice, send, startListening, stopListening, endOneShot, endFollow, toggleDrawer, toggleMemory]);
 
   const engage = () => {
     speaker.unlock(); // inside the click: browsers only allow audio after a gesture
@@ -534,7 +563,14 @@ export default function App() {
             onClose={() => setSwitcher(false)}
           />
 
-          <Captions user={lastUser?.text} luna={lunaCaption} interim={liveCaption} notice={notice} />
+          {/* The transcript drawer already shows the conversation. */}
+          <Captions
+            user={drawer ? undefined : lastUser?.text}
+            luna={drawer ? undefined : lunaCaption}
+            interim={liveCaption}
+            notice={notice}
+            beside={drawer || memoryOpen}
+          />
 
           <AnimatePresence mode="wait">
             {currentPause && (
@@ -571,9 +607,14 @@ export default function App() {
             onHandsFree={() => setHandsFree((v) => !v)}
             onVoiceOut={() => setVoiceOut((v) => !v)}
             onKeyboard={() => setTyping((v) => !v)}
-            onTranscript={() => setDrawer((v) => !v)}
+            onTranscript={toggleDrawer}
             onAbort={() => send({ type: "cancel" })}
+            memory={state.memoryOn}
+            inbox={state.inbox}
+            onMemory={toggleMemory}
           />
+
+          <MemoryPanel open={memoryOpen} state={state} send={send} onClose={() => setMemoryOpen(false)} />
 
           <ChatDrawer
             open={drawer}
@@ -591,7 +632,7 @@ export default function App() {
 
           <div className="hint">
             {whisper && handsFree ? "“HEY LUNA” · TALK" : voiceIn ? "SPACE · TALK" : "VOICE INPUT NEEDS CHROME / EDGE"} &nbsp;/&nbsp; / · TYPE
-            &nbsp;/&nbsp; T · LOG &nbsp;/&nbsp; M · MODEL &nbsp;/&nbsp; ESC · HUSH
+            &nbsp;/&nbsp; T · LOG {state.memoryOn && <>&nbsp;/&nbsp; K · MEMORY </>}&nbsp;/&nbsp; M · MODEL &nbsp;/&nbsp; ESC · {state.busy ? "STOP" : "HUSH"}
           </div>
         </>
       )}

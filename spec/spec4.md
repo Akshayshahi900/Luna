@@ -175,6 +175,37 @@ and noisy. The main agent's system prompt is now built by
   "It's 33 degrees, Sir, with a 30 percent chance of rain."
 - Tests: `tests/test_persona.py`.
 
+## 4e. HUD polish: captions, active agent, STOP, context meter (added 2026-10-18)
+
+Visual style unchanged; the transcript drawer and approval card are untouched.
+
+- **Captions** (`Captions.tsx`, `.captions`): width is limited to the gap
+  between the side panels (`--cap-side` = panel offset + width + gutter,
+  per breakpoint) and long words wrap. With the transcript open, the user
+  and Luna lines are hidden; live speech and notices move left of the drawer
+  (hidden on ≤ 900 px).
+- **Contrast**: the YOU line and the shortcut hint use `--text` at
+  ~74 % / ~58 % with a dark shadow — readable, still dimmer than Luna's line.
+- **Truncated text**: `Clip` (Hud.tsx) on MODEL and activity lines: full
+  text in the tooltip, click / Enter toggles expanded.
+- **Active agent**: the running agent's row glows and shows WORKING.
+- **Nesting**: helper events carry `parent` (DECISIONS D27);
+  `nestActivity()` (state.ts) groups them under their DEPLOY entry,
+  children oldest first, at most 5 shown (+N EARLIER).
+- **STOP**: the dock's red button (was ABORT) and **Esc while a task
+  runs** send `cancel`; the run's asyncio task is cancelled, which stops
+  helpers inside it. The reducer logs an INTERRUPTED entry. Esc with
+  nothing running still hushes; with an approval open it does not cancel
+  (D28). The hint reads ESC · STOP while busy.
+- **Context meter**: `context` event `{used, max}` (server.py
+  `Session._context`): approximate thread-history tokens over
+  `summary_trigger_tokens` (128K when off). SUBSYSTEMS → CONTEXT bar,
+  amber > 70 %, red > 90 %.
+- Tests: `tests/test_web.py` (parent mapping incl. two parallel helpers,
+  context before `done`, event order on connect/cancel),
+  `web/src/lib/state.test.ts` (nesting, fallback parent, INTERRUPTED,
+  context).
+
 ## 5. Verification
 
 - `tests/test_web.py`: translator, pause description/answers, origin check,

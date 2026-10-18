@@ -2,7 +2,7 @@
 
 Luna is a general assistant: one main ReAct agent that does quick work
 itself and hands bigger jobs to helper subagents. Design history is in
-`spec/` (spec1 → spec4); decisions and their reasons in `DECISIONS.md`.
+`spec/` (spec1 → spec5); decisions and their reasons in `DECISIONS.md`.
 Two front doors share the same agent code: the terminal CLI and a
 voice-first web UI (`docs/web-ui.md`).
 
@@ -18,9 +18,10 @@ voice-first web UI (`docs/web-ui.md`).
    │                                         ▼
    │        ┌──────────────────── MAIN AGENT (agent/builder) ───────────────────┐
    │        │ middleware: TaskBudget → ModelCallLimit → ToolCallLimit →         │
-   │        │             TodoList → Scratchpad → [HITL] → Summarization        │
+   │        │   TodoList → Scratchpad → LongTermMemory → [HITL] → Summarization │
    │        │ tools: get_current_time, calculator, ask_user, write_todos,       │
-   │        │        write_note, untagged MCP tools, ask_* delegates            │
+   │        │        write_note, recall, remember, suggest_update/_forget,      │
+   │        │        untagged MCP tools, ask_* delegates                        │
    │        └───────┬──────────────┬──────────────┬──────────────┬─────────────┘
    │                ▼              ▼              ▼              ▼
    │         ask_researcher    ask_files       ask_coder     ask_assistant
@@ -31,7 +32,9 @@ voice-first web UI (`docs/web-ui.md`).
    └──── pauses ◀───┴── interrupt() / HumanInTheLoopMiddleware ──┘
 
  Storage: data/luna_memory.sqlite (checkpoints: thread history, scratchpad,
-          paused helper runs) · workspace/ (files the helpers may touch)
+          paused helper runs) · data/luna_longterm.sqlite (long-term memory:
+          memories, suggestions, history; only the user writes memories)
+          · workspace/ (files the helpers may touch)
 ```
 
 ## One message, end to end
@@ -43,7 +46,8 @@ voice-first web UI (`docs/web-ui.md`).
 3. Before every model call, in any agent, `TaskBudgetMiddleware` takes one unit.
    The main agent sees its system prompt (role + persona: style, "Sir",
    user profile, `config/persona.md`; built by `agent/persona.py`) plus the
-   scratchpad (todos + notes).
+   scratchpad (todos + notes) and long-term memory (pinned + keyword
+   matches for the message; `agent/longterm.py`).
 4. The model either answers, calls a direct tool, or calls `ask_<helper>`.
    A helper runs its own capped loop and returns ≤ 300 words (the
    researcher: ≤ 60 words of facts; the main agent phrases the reply).
@@ -51,24 +55,34 @@ voice-first web UI (`docs/web-ui.md`).
    run ends; `run_task` returns the pending pauses from `aget_state()`.
 6. `run_turn` asks you, then calls `run_task` again with
    `Command(resume={id: answer})` and the same budget. Repeat until no pauses.
-7. The checkpointer has saved messages, scratchpad and any paused helper
+7. Any `remember` / `suggest_*` call only queued a suggestion; the user
+   accepts or declines it in the web Memory panel or with `/memory`
+   (`docs/memory.md`).
+8. The checkpointer has saved messages, scratchpad and any paused helper
    state under the thread id; old messages get summarized past 12k tokens
    (the newest ~4k tokens stay word-for-word, so summaries stay rare).
 
 The web path is the same loop split over socket messages: `message` →
 steps 1–5, the pauses go to the browser as `pause`, and `resume` is step 6.
+Helper events carry `parent` (the `ask_*` call id, passed through the
+helper run's metadata) so the HUD can nest them, and each run ends with a
+`context` event (thread tokens vs. the summarization point) before
+`done` / `pause`. `cancel` (STOP / Esc while running) cancels the run's
+asyncio task, which stops any helpers inside it.
 Protocol: `docs/web-ui.md`.
 
 ## Files
 
 ```
 src/luna/
-  cli/chat.py              REPL, printing, pause handling (run_turn, answer_interrupt)
+  cli/chat.py              REPL, printing, pause handling (run_turn, answer_interrupt),
+                           /memory (memory_command)
   voice/tts.py             PiperTTS: local text-to-speech for the web UI (/api/tts)
   voice/stt.py             WhisperSTT: local speech-to-text for the web UI (/api/stt)
   web/
     server.py              luna-web: Starlette app, AgentHost (model switch), /ws Session
-                           (background runs, cancel + cancel_cleanup), /api/tts, /api/stt,
+                           (background runs, cancel + cancel_cleanup, memory panel
+                           messages), /api/tts, /api/stt,
                            origin check, serves web/dist
     events.py              stream events → JSON; pause describe / answer conversion
   config/settings.py       all LUNA_* settings
@@ -80,6 +94,8 @@ src/luna/
     runner.py              run_task: one run with budget + event stream + pending pauses
     budget.py              TaskBudget + TaskBudgetMiddleware
     scratchpad.py          notes state, write_note, ScratchpadMiddleware
+    longterm.py            LongTermStore (SQLite + FTS5, suggestions, history/undo),
+                           recall/remember/suggest_* tools, LongTermMemoryMiddleware
     memory.py              checkpointer factory (sqlite / memory)
     subagents/
       base.py              SubagentSpec, make_delegate_tool, needs_approval
@@ -102,12 +118,13 @@ servers/tasks_mcp_server.py local to-dos (data/tasks.json) for ask_assistant
 tests/                     pytest suite (fake models, no API key)
 web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
   src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
-  src/core (3D core), src/components (HUD, drawer, pause card)
+  src/core (3D core), src/components (HUD, drawer, pause card, memory panel)
 docs/web-ui.md             running the web UI, WebSocket protocol
+docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 spec/                      design specs; DECISIONS.md; this file
 ```
 
 ## Not built yet
 
-Long-term memory across threads (spec3 §9), voice in the CLI, and a wake
-word that works without the web page open.
+Voice in the CLI, a wake word that works without the web page open, and
+semantic (embedding) search for long-term memory.

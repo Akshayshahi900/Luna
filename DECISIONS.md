@@ -222,3 +222,58 @@ a factual question in one call. Chosen over post-processing replies
 (trimming, stripping markdown), which can't make a long answer short
 without another model call. Cost: the persona adds ~250 tokens to every
 main-agent call; in concise mode the user has to ask for detail.
+
+## D27 — Helper steps are linked to their `ask_*` call through run metadata (2026-10-18, spec4 §4e)
+NEURAL ACTIVITY nests each helper's steps under the delegation that
+started them, so every helper event needs its parent call id. LangGraph
+gives a helper run its own namespace (`tools:<task id>`), which says
+nothing about the tool call. The delegate tool now takes an injected
+`ToolRuntime` (optional, so direct calls in tests still work) and runs the
+helper with `metadata={"luna_parent_call": <call id>}`; that metadata shows
+up on the helper's streamed `messages` events, which always come before its
+first update, so `EventTranslator` maps namespace → parent and adds
+`parent` to helper `tool_call` / `tool_result` / `notice` events. Verified
+with two parallel helpers on fake models. Chosen over guessing by order
+(wrong for parallel helpers) and over a `custom` stream mode (changes the
+CLI's event handling too). The browser falls back to "newest running
+delegation" when `parent` is missing.
+
+## D28 — Context meter measures thread history against the summarization point; Esc stops a running task (2026-10-18, spec4 §4e)
+The CONTEXT row shows `count_tokens_approximately(thread messages)` over
+`summary_trigger_tokens` — the same counter and limit SummarizationMiddleware
+uses, so 100 % means "older messages get summarized now", which is the
+real ceiling of a Luna thread (model context windows are far larger and
+differ per provider). 128K is shown when summarizing is off. It's sent on
+sync and just before each run's final event (not per token: one
+`aget_state` per run is cheap, per step is not needed). It excludes the
+system prompt and tool schemas. For STOP, Esc already meant HUSH and every
+free letter was a guess, so Esc now cancels when a task is running
+(`busy`) and hushes otherwise. Open approvals/questions are not "running":
+Esc there still only hushes, so it can't silently abandon an approval
+(the STOP button and "Luna, cancel" still can).
+
+## D29 — Long-term memory: the agent only suggests, the user writes; keyword search, no embeddings (2026-10-18, spec5)
+Facts about the user now outlive threads in `data/luna_longterm.sqlite`
+(`agent/longterm.py`), a separate file from the checkpoints. To keep a model
+from spoiling it, the agent has **no write path** to `memories`: `remember`,
+`suggest_update` and `suggest_forget` only queue rows in `suggestions`. The
+user accepts (optionally rewording), or declines, in the web Memory panel or
+with `/memory`. Guards run in code before a suggestion is queued: ≤ 300
+chars, no secret-looking text, no duplicates of memories, pending or
+declined suggestions, ≤ 3 per message (counted on the `TaskBudget`). Every
+user change writes a before/after row to `memory_history`, and deletes are
+soft, so any change can be undone step by step. Sync is explicit: memories
+reach the main agent through `LongTermMemoryMiddleware` (pinned + top-5
+FTS5 matches for the latest user message, ≤ 1500 chars, read fresh every
+model call, so panel edits apply immediately). Thread content is promoted
+only when the agent suggests it. There is no extract-on-summarize pass,
+which would cost an extra model call. FTS5 over embeddings: zero API calls,
+no model download, enough for a few hundred memories; paraphrases are
+covered by pinning and `recall`. The store uses plain `sqlite3` behind a
+lock (queries are sub-millisecond, and sync tools run in worker threads)
+rather than aiosqlite. Ruled out: direct agent writes with approval pauses
+(interrupts every turn), auto-add with ownership rules (the agent could
+still fill memory with noise), and helpers reading memory (the main agent
+passes facts, as with the persona, D26). Memory socket messages use
+`memory_error` instead of `error`, because `error` ends a run in the browser.
+

@@ -36,6 +36,7 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware, ModelCallLimitMiddleware
+from langchain.tools import ToolRuntime
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, Field
 
@@ -46,6 +47,10 @@ _DELEGATE_FLAG = "luna_delegate"
 # Final-message prefixes that mean "stopped early" rather than a real answer:
 # ModelCallLimitMiddleware's limit message and the task-budget message.
 _STOP_PREFIXES = ("Model call limits exceeded", BUDGET_MESSAGE_PREFIX)
+# Run metadata key holding the ask_* tool call id a subagent run belongs to.
+# It shows up in the subagent's streamed "messages" events, so the web UI can
+# nest the helper's steps under the right delegation (web/events.py).
+PARENT_CALL_METADATA = "luna_parent_call"
 
 
 @dataclass
@@ -131,14 +136,16 @@ def make_delegate_tool(spec: SubagentSpec, default_model: Any) -> BaseTool:
         name=spec.name,
     )
 
-    async def run(task: str, context: str = "") -> str:
+    # `runtime` is injected when the tool runs inside an agent (None when a
+    # test calls the tool directly); it carries the calling tool call's id.
+    async def run(task: str, context: str = "", runtime: ToolRuntime = None) -> str:
         prompt = f"{task}\n\nContext:\n{context}" if context.strip() else task
+        config: dict[str, Any] = {"recursion_limit": spec.max_model_calls * 10 + 20}
+        if runtime is not None and runtime.tool_call_id:
+            config["metadata"] = {PARENT_CALL_METADATA: runtime.tool_call_id}
         try:
             result = await asyncio.wait_for(
-                agent.ainvoke(
-                    {"messages": [{"role": "user", "content": prompt}]},
-                    {"recursion_limit": spec.max_model_calls * 10 + 20},
-                ),
+                agent.ainvoke({"messages": [{"role": "user", "content": prompt}]}, config),
                 timeout=spec.timeout_seconds,
             )
         except TimeoutError:
@@ -174,4 +181,4 @@ def make_delegate_tool(spec: SubagentSpec, default_model: Any) -> BaseTool:
     )
 
 
-__all__ = ["SubagentSpec", "make_delegate_tool", "needs_approval"]
+__all__ = ["PARENT_CALL_METADATA", "SubagentSpec", "make_delegate_tool", "needs_approval"]

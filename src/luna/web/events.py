@@ -14,6 +14,12 @@ into zero or more plain dicts:
   {"type": "notice",      "text": "...", "depth": n}            e.g. limit reached
 
 depth 0 = the main agent, 1 = a helper (subagent) running inside ask_*.
+Helper events (depth >= 1) also carry "parent": the id of the ask_* tool
+call they run under (or null if unknown), so the UI can nest them. The
+link comes from the run metadata the delegate tool sets
+(PARENT_CALL_METADATA), which only "messages" events carry: each helper
+streams its model output before its first update, so the namespace is
+known by the time its tool calls arrive.
 
 Pauses work the other way round: describe_pause() turns an Interrupt into
 something the UI can show, and build_answer() turns the browser's reply
@@ -27,6 +33,8 @@ from typing import Any
 
 from langgraph.types import Interrupt
 
+from luna.agent.subagents.base import PARENT_CALL_METADATA
+
 # Tool results can be long; the UI only shows a glimpse.
 TOOL_RESULT_PREVIEW = 240
 
@@ -39,9 +47,16 @@ def _short(text: str, limit: int = TOOL_RESULT_PREVIEW) -> str:
 class EventTranslator:
     """Callable that maps one run_task event to a list of JSON-ready dicts."""
 
+    def __init__(self) -> None:
+        # namespace[0] of a helper run → id of the ask_* call it belongs to
+        self._parents: dict[str, str] = {}
+
     def __call__(self, namespace: tuple[str, ...], mode: str, payload: Any) -> list[dict]:
         if mode == "messages":
             chunk, metadata = payload
+            parent = metadata.get(PARENT_CALL_METADATA)
+            if namespace and parent:
+                self._parents.setdefault(namespace[0], parent)
             # Same rule as the CLI: only the main agent's model text is the reply.
             if namespace or metadata.get("langgraph_node") != "model":
                 return []
@@ -50,6 +65,7 @@ class EventTranslator:
 
         events: list[dict] = []
         depth = len(namespace)
+        extra = {"parent": self._parents.get(namespace[0])} if namespace else {}
         for node, update in (payload or {}).items():
             if node == "__interrupt__":
                 continue  # sent as a "pause" after the run, see server.py
@@ -62,6 +78,7 @@ class EventTranslator:
                             "name": call["name"],
                             "args": call.get("args", {}),
                             "depth": depth,
+                            **extra,
                         })
                 elif message.type == "tool":
                     events.append({
@@ -70,10 +87,11 @@ class EventTranslator:
                         "name": getattr(message, "name", None),
                         "preview": _short(str(message.content)),
                         "depth": depth,
+                        **extra,
                     })
                 elif message.type == "ai" and node != "model" and message.text:
                     # Written by middleware, e.g. "Model call limits exceeded".
-                    events.append({"type": "notice", "text": message.text, "depth": depth})
+                    events.append({"type": "notice", "text": message.text, "depth": depth, **extra})
         return events
 
 

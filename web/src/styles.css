@@ -289,14 +289,41 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
 .agent-led { width: 8px; height: 8px; border-radius: 50%; background: rgba(var(--accent-rgb), 0.25); }
 .agent.busy { background: rgba(var(--accent-rgb), 0.12); border-color: rgba(var(--accent-rgb), 0.5); }
 .agent.busy .agent-led { background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: blink 0.5s infinite; }
+.agent.busy { box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.35), inset 0 0 10px rgba(var(--accent-rgb), 0.15); color: #fff; text-shadow: 0 0 8px var(--accent); }
+.agent.busy .agent-role { color: var(--accent); letter-spacing: 0.24em; animation: blink 1.2s ease-in-out infinite; }
+
+/* Truncated text: hover for a tooltip, click to expand */
+.clip { cursor: pointer; }
+.clip:focus-visible { outline: 1px solid rgba(var(--accent-rgb), 0.6); outline-offset: 2px; }
+.clip.open { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+.sys-grid dd.clip.open { grid-column: 1 / -1; text-align: left; }
+.act-body { flex: 1; }
+
+/* Helper steps under a delegation, and the STOP marker */
+.act-more { margin-left: 16px; padding: 2px 9px; font-size: 10px; letter-spacing: 0.24em; color: var(--muted); }
+.act.interrupted { border-left-color: var(--red); background: rgba(255, 61, 106, 0.08); }
+.act.interrupted .act-status { border-color: var(--red); background: var(--red); box-shadow: 0 0 8px var(--red); }
+.act.interrupted .act-name { color: var(--red); }
+
+/* Context meter (Subsystems) */
+.ctx { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.ctx-bar { flex: none; width: 60px; height: 4px; background: rgba(var(--accent-rgb), 0.15); }
+.ctx-bar i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 6px var(--accent); transition: width 0.4s; }
+.ctx.warm { color: var(--amber); }
+.ctx.warm .ctx-bar i { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.ctx.hot { color: var(--red); }
+.ctx.hot .ctx-bar i { background: var(--red); box-shadow: 0 0 6px var(--red); }
 
 /* ---------- Captions ---------- */
 .captions {
+  /* panel offset + panel width + gutter: the captions never reach under a panel */
+  --cap-side: calc(44px + 290px + 24px);
   position: absolute;
   left: 50%;
   bottom: 160px;
   transform: translateX(-50%);
-  width: min(780px, calc(100vw - 32px));
+  width: min(780px, calc(100vw - 2 * var(--cap-side)));
+  overflow-wrap: anywhere;
   text-align: center;
   z-index: 3;
   display: flex;
@@ -315,7 +342,13 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
   border: 1px solid currentColor;
   opacity: 0.8;
 }
-.cap-user { color: var(--muted); font-size: 16px; letter-spacing: 0.04em; }
+/* Brighter than --muted so it reads over the core, still dimmer than Luna's line. */
+.cap-user {
+  color: color-mix(in srgb, var(--text) 74%, transparent);
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
 .cap-user.live { color: #fff; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.9); }
 .cap-luna {
   font-size: 21px;
@@ -325,6 +358,11 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
   text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.55), 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 .cap-luna .cap-tag { color: var(--accent); }
+/* Transcript drawer open: only live speech / notices, in the gap left of it. */
+.captions.beside {
+  left: calc(var(--cap-side) + (100vw - var(--cap-side) - min(460px, 100vw) - 24px) / 2);
+  width: min(780px, calc(100vw - var(--cap-side) - min(460px, 100vw) - 24px));
+}
 .cap-notice { color: var(--amber); font-size: 14px; letter-spacing: 0.06em; }
 .caret {
   display: inline-block;
@@ -419,10 +457,10 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
   bottom: 10px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.28em;
-  color: var(--muted);
-  opacity: 0.6;
+  color: color-mix(in srgb, var(--text) 58%, transparent);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
 }
 
@@ -681,13 +719,15 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
 /* ---------- Small screens ---------- */
 @media (max-width: 1100px) {
   .panel { width: 240px; }
+  .captions { --cap-side: calc(44px + 240px + 24px); }
 }
 @media (max-width: 900px) {
   .activity, .systems { display: none; }
   .topbar { left: 22px; right: 22px; grid-template-columns: 1fr auto; }
   .phase-chip { grid-column: 1 / -1; grid-row: 2; justify-self: center; margin-top: 14px; min-width: 0; }
   .clock-date, .brand-sub { display: none; }
-  .captions { bottom: 140px; }
+  .captions { bottom: 140px; --cap-side: 16px; }
+  .captions.beside { display: none; }
   .cap-luna { font-size: 17px; }
   .dock { gap: 6px; bottom: 26px; }
   .dock-btn { width: 50px; }
@@ -758,3 +798,84 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
 /* Abort sits where TYPE is while a task runs */
 .dock-btn.abort { color: var(--red); border-color: rgba(255, 61, 106, 0.6); background: rgba(255, 61, 106, 0.08); }
 .dock-btn.abort:hover { color: #fff; background: var(--red); }
+
+/* ---------- Memory panel (long-term memory) ---------- */
+.dock-btn { position: relative; }
+.dock-badge {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--amber);
+  color: var(--bg);
+  font: 700 10px/16px var(--font-mono);
+  text-align: center;
+  box-shadow: 0 0 8px rgba(var(--amber-rgb), 0.8);
+}
+.mem-tabs { display: flex; gap: 14px; }
+.mem-tabs button { background: none; border: 0; padding: 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.mem-tabs button:hover, .mem-tabs button.current { color: var(--accent); }
+.mem-error, .mem-undo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 22px 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid rgba(var(--amber-rgb), 0.3);
+  background: rgba(var(--amber-rgb), 0.06);
+  color: var(--amber);
+}
+.mem-error { color: var(--red); border-color: rgba(255, 61, 106, 0.4); background: rgba(255, 61, 106, 0.06); }
+.mem-undo .mem-btn { margin-left: auto; }
+.mem-search, .mem-form textarea, .mem-form select {
+  width: 100%;
+  padding: 8px 10px;
+  font: 14px var(--font-ui);
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(var(--accent-rgb), 0.25);
+  outline: none;
+}
+.mem-search:focus, .mem-form textarea:focus { border-color: var(--accent); }
+.mem-form select { width: auto; font-size: 12px; }
+.mem-form textarea { resize: vertical; }
+.mem-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.mem-card {
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mem-card.pinned { border-left: 2px solid var(--accent); }
+.mem-card.suggestion { border-color: rgba(var(--amber-rgb), 0.35); background: rgba(var(--amber-rgb), 0.04); }
+.mem-card.suggestion.forget .mem-old { text-decoration: line-through; }
+.mem-meta { display: flex; justify-content: space-between; font: 10px var(--font-mono); letter-spacing: 0.15em; color: var(--muted); }
+.mem-text { font-size: 15px; white-space: pre-wrap; }
+.mem-old { font-size: 13px; color: var(--muted); }
+.mem-card.update .mem-old::after { content: " →"; }
+.mem-reason { font-size: 12px; color: var(--muted); font-style: italic; }
+.mem-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mem-spacer { flex: 1; }
+.mem-form { display: flex; flex-direction: column; gap: 8px; }
+.mem-btn {
+  padding: 4px 9px;
+  font: 600 10px var(--font-mono);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  background: none;
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+}
+.mem-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.mem-btn.primary { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.6); }
+.mem-btn.primary:hover:not(:disabled) { background: var(--accent); color: var(--bg); }
+.mem-btn.danger:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
+.mem-history { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px dashed rgba(var(--accent-rgb), 0.2); font: 11px/1.5 var(--font-mono); color: var(--muted); }
+.mem-history .undone { text-decoration: line-through; opacity: 0.6; }
+.mem-history em { font-style: normal; opacity: 0.7; }
+.mem-history .mem-btn { align-self: flex-start; margin-top: 4px; }

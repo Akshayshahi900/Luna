@@ -35,6 +35,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MCP_CONFIG = PROJECT_ROOT / "config" / "mcp_servers.json"
 DEFAULT_CHECKPOINT_PATH = PROJECT_ROOT / "data" / "luna_memory.sqlite"
+DEFAULT_LONGTERM_PATH = PROJECT_ROOT / "data" / "luna_longterm.sqlite"
 DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
 DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
 DEFAULT_STT_DIR = PROJECT_ROOT / "data" / "models" / "whisper"
@@ -194,6 +195,28 @@ class Settings(BaseSettings):
             "summarizing. Kept well below summary_trigger_tokens so one summary "
             "buys many turns instead of re-summarizing on every model call."
         ),
+    )
+
+    # --- Long-term memory (across threads; see luna/agent/longterm.py) ---
+    enable_longterm_memory: bool = Field(
+        default=True,
+        description="Remember facts about you across threads (you approve every change)",
+    )
+    longterm_memory_path: Path = Field(
+        default=DEFAULT_LONGTERM_PATH,
+        description="SQLite file for long-term memory (separate from thread checkpoints)",
+    )
+    memory_recall_limit: int = Field(
+        default=5,
+        description="Keyword matches shown to Luna per message, besides pinned memories",
+    )
+    memory_prompt_chars: int = Field(
+        default=1500,
+        description="Max characters of memories added to the system prompt",
+    )
+    memory_max_suggestions: int = Field(
+        default=3,
+        description="Max memory suggestions Luna may make for one message",
     )
 
     # --- Tools ---

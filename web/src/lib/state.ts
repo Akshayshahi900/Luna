@@ -1,6 +1,6 @@
 // Pure reducer for everything the server tells us. No DOM, no sockets:
 // that keeps it unit-testable (state.test.ts).
-import type { Pause, ProviderInfo, ServerEvent } from "./protocol";
+import type { Memory, MemoryHistoryEntry, MemorySuggestion, Pause, ProviderInfo, ServerEvent } from "./protocol";
 
 export interface ChatMessage {
   id: string;
@@ -13,9 +13,19 @@ export interface Activity {
   name: string;
   args: Record<string, unknown>;
   depth: number;
-  status: "running" | "done";
+  /** "interrupted": the STOP marker logged when a run is cancelled */
+  status: "running" | "done" | "interrupted";
   preview?: string;
   at: number;
+  /** id of the ask_* call a helper step runs under */
+  parent?: string;
+}
+
+/** A top-level activity entry and the helper steps nested under it. */
+export interface ActivityGroup {
+  item: Activity;
+  /** oldest first */
+  children: Activity[];
 }
 
 export interface LunaState {
@@ -47,6 +57,17 @@ export interface LunaState {
   activeHelpers: string[];
   /** tool calls in the current task */
   ops: number;
+  /** thread history tokens vs. the summarization point (context meter) */
+  context?: { used: number; max: number };
+  /** long-term memory is on */
+  memoryOn: boolean;
+  memories: Memory[];
+  suggestions: MemorySuggestion[];
+  /** pending suggestions (the Memory button badge) */
+  inbox: number;
+  /** change log of the memory the panel is showing, if any */
+  memoryHistory?: { id: number; entries: MemoryHistoryEntry[] };
+  memoryError?: string;
 }
 
 export type Action =
@@ -76,6 +97,10 @@ export const initialState: LunaState = {
   replyBreak: false,
   activeHelpers: [],
   ops: 0,
+  memoryOn: false,
+  memories: [],
+  suggestions: [],
+  inbox: 0,
 };
 
 let seq = 0;
@@ -85,6 +110,20 @@ const nextId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${(seq+
 export function helperOf(toolName: string | null | undefined): string | null {
   if (!toolName || !toolName.startsWith("ask_") || toolName === "ask_user") return null;
   return toolName.slice(4);
+}
+
+/** Group helper steps under their delegation entry. `activity` is newest
+ * first and so are the groups; children are oldest first (chronological). */
+export function nestActivity(activity: Activity[]): ActivityGroup[] {
+  const ids = new Set(activity.map((a) => a.id));
+  // A step whose parent already scrolled out of the list stands on its own.
+  const nested = (a: Activity) => a.depth > 0 && !!a.parent && ids.has(a.parent);
+  const groups = activity.filter((a) => !nested(a)).map((item) => ({ item, children: [] as Activity[] }));
+  const byId = new Map(groups.map((g) => [g.item.id, g]));
+  for (const a of [...activity].reverse()) {
+    if (nested(a)) byId.get(a.parent!)?.children.push(a);
+  }
+  return groups;
 }
 
 function finishReply(state: LunaState): LunaState {
@@ -103,6 +142,7 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
         canSwitch: event.can_switch,
         tools: event.tools,
         helpers: event.helpers,
+        memoryOn: !!event.memory,
       };
 
     case "model":
@@ -156,6 +196,11 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
         };
       }
       const helper = event.depth === 0 ? helperOf(event.name) : null;
+      // Older servers send no parent: assume the newest running delegation.
+      const parent =
+        event.depth > 0
+          ? (event.parent ?? state.activity.find((a) => a.depth === 0 && a.status === "running" && helperOf(a.name))?.id)
+          : undefined;
       const item: Activity = {
         id: event.id ?? nextId("t"),
         name: event.name,
@@ -163,6 +208,7 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
         depth: event.depth,
         status: "running",
         at: Date.now(),
+        ...(parent ? { parent } : {}),
       };
       return {
         ...state,
@@ -189,6 +235,9 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
       return { ...state, activity, activeHelpers };
     }
 
+    case "context":
+      return { ...state, context: { used: event.used, max: event.max } };
+
     case "notice":
       return {
         ...state,
@@ -201,16 +250,50 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
     case "done":
       return finishReply(state);
 
-    case "cancelled":
+    case "cancelled": {
+      const stopped = state.activity.map((a) =>
+        a.status === "running" ? { ...a, status: "done" as const, preview: "cancelled" } : a,
+      );
+      // Log the stop in Neural Activity when something was actually running.
+      const wasRunning = state.busy || state.pauses.length > 0 || state.activity.some((a) => a.status === "running");
+      const marker: Activity = {
+        id: nextId("x"),
+        name: "interrupted",
+        args: { reason: event.tools.length ? `stopped: ${event.tools.join(", ")}` : "stopped by user" },
+        depth: 0,
+        status: "interrupted",
+        at: Date.now(),
+      };
       return {
         ...finishReply(state),
         pauses: [],
-        activity: state.activity.map((a) => (a.status === "running" ? { ...a, status: "done" as const, preview: "cancelled" } : a)),
+        activity: wasRunning ? [marker, ...stopped].slice(0, MAX_ACTIVITY) : stopped,
         messages: [...state.messages, { id: nextId("n"), role: "system", text: "Cancelled." }],
       };
+    }
 
     case "error":
       return { ...finishReply(state), error: event.message, switching: false };
+
+    case "memories":
+      return {
+        ...state,
+        memories: event.items,
+        suggestions: event.suggestions,
+        inbox: event.suggestions.length,
+        memoryError: undefined,
+        // the shown history is stale after any change
+        memoryHistory: undefined,
+      };
+
+    case "memory_inbox":
+      return { ...state, inbox: event.count };
+
+    case "memory_history":
+      return { ...state, memoryHistory: { id: event.id, entries: event.entries } };
+
+    case "memory_error":
+      return { ...state, memoryError: event.message };
   }
 }
 

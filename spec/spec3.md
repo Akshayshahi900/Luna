@@ -150,6 +150,10 @@ researcher hasn't run live (no Tavily key yet).
 
 ## 9. Next — phase F, long-term memory
 
+> Superseded by [spec5](spec5.md): built with keyword search (no
+> embeddings) and a suggestions inbox instead of direct `remember` /
+> `forget` writes.
+
 - `AsyncSqliteStore` with a vector index; namespaces `("memories", user)`
   (facts, preferences) and `("episodes", user)` (one-line task summaries).
 - Main-agent tools `remember`, `recall`, `forget`; `MemoryMiddleware` injects

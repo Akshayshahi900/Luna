@@ -1,5 +1,8 @@
 # Personalizing Luna
 
+For facts Luna should remember about you across conversations, use
+long-term memory instead: see `docs/memory.md`.
+
 Luna's behaviour comes from her system prompt, which is built from a few
 settings plus an optional file (`src/luna/agent/persona.py`). Set them in
 `.env` and restart `luna` / `luna-web`.

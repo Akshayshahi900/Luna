@@ -38,7 +38,8 @@ def test_updates_become_tool_calls_results_and_notices():
     notice = AIMessage(content="Model call limits exceeded")
 
     assert t(("tools:x",), "updates", {"model": {"messages": [call]}}) == [
-        {"type": "tool_call", "id": "c1", "name": "calculator", "args": {"expression": "1+1"}, "depth": 1}
+        {"type": "tool_call", "id": "c1", "name": "calculator", "args": {"expression": "1+1"}, "depth": 1,
+         "parent": None}  # helper event; no run metadata seen for this namespace
     ]
     assert t((), "updates", {"tools": {"messages": [result]}}) == [
         {"type": "tool_result", "id": "c1", "name": "calculator", "preview": "2", "depth": 0}
@@ -47,6 +48,57 @@ def test_updates_become_tool_calls_results_and_notices():
         {"type": "notice", "text": "Model call limits exceeded", "depth": 0}
     ]
     assert t((), "updates", {"__interrupt__": (), "other": None}) == []
+
+
+def test_helper_events_carry_their_parent_call():
+    """A helper run's namespace is linked to its ask_* call via run metadata."""
+    from luna.agent.subagents.base import PARENT_CALL_METADATA
+
+    t = EventTranslator()
+    call = AIMessage(content="", tool_calls=[{"name": "run_command", "args": {"command": "ls"}, "id": "h1"}])
+    # Before any metadata the parent is unknown.
+    assert t(("tools:a",), "updates", {"model": {"messages": [call]}})[0]["parent"] is None
+    t(("tools:a",), "messages", (AIMessageChunk(content=""), {PARENT_CALL_METADATA: "m1"}))
+    t(("tools:b",), "messages", (AIMessageChunk(content=""), {PARENT_CALL_METADATA: "m2"}))
+    (event,) = t(("tools:a",), "updates", {"model": {"messages": [call]}})
+    assert event["parent"] == "m1" and event["depth"] == 1
+    result = ToolMessage(content="ok", tool_call_id="h1", name="run_command")
+    assert t(("tools:b",), "updates", {"tools": {"messages": [result]}})[0]["parent"] == "m2"
+    # Main-agent events have no parent field.
+    assert "parent" not in t((), "updates", {"model": {"messages": [call]}})[0]
+
+
+async def test_parallel_helpers_nest_under_their_own_call(make_fake_model):
+    """Two ask_* calls at once: each helper step points at the call it runs under."""
+    from luna.agent.subagents import SubagentSpec, make_delegate_tool
+
+    helper = make_fake_model(tool_call("calculator", "h1", expression="2+2"), "a done",
+                             tool_call("calculator", "h2", expression="3+3"), "b done")
+    delegate = make_delegate_tool(
+        SubagentSpec(name="ask_coder", description="Code.", system_prompt="p", tools=[calculator], model=helper),
+        default_model=None,
+    )
+    main = make_fake_model(
+        AIMessage(content="", tool_calls=[
+            {"name": "ask_coder", "args": {"task": "a"}, "id": "m1"},
+            {"name": "ask_coder", "args": {"task": "b"}, "id": "m2"},
+        ]),
+        "all done",
+    )
+    agent = create_agent(model=main, tools=[delegate], checkpointer=InMemorySaver())
+    t, events = EventTranslator(), []
+    async for ns, mode, data in agent.astream(
+        {"messages": [{"role": "user", "content": "go"}]},
+        config={"configurable": {"thread_id": "t"}},
+        stream_mode=["messages", "updates"],
+        subgraphs=True,
+    ):
+        events += t(ns, mode, data)
+    nested = [e for e in events if e["type"] in {"tool_call", "tool_result"} and e["depth"] == 1]
+    assert nested and all(e["parent"] in {"m1", "m2"} for e in nested)
+    # A helper's call and its result share one parent.
+    parent_of = {e["id"]: e["parent"] for e in nested if e["type"] == "tool_call"}
+    assert all(parent_of[e["id"]] == e["parent"] for e in nested if e["type"] == "tool_result")
 
 
 def test_long_tool_results_are_shortened():
@@ -154,6 +206,7 @@ def _connect(client):
     session = ws.__enter__()
     hello = session.receive_json()
     thread = session.receive_json()
+    assert session.receive_json()["type"] == "context"  # sent right after "thread"
     return ws, session, hello, thread
 
 
@@ -172,6 +225,19 @@ def test_socket_streams_a_reply(make_fake_model):
         assert {"type": "tool_call", "id": "c1", "name": "calculator", "args": {"expression": "6*7"}, "depth": 0} in events
         assert any(e["type"] == "tool_result" and e["preview"] == "42" for e in events)
         assert "".join(e["text"] for e in events if e["type"] == "token") == "The answer is 42"
+        ws.__exit__(None, None, None)
+
+
+def test_socket_reports_context_use_before_done(make_fake_model):
+    agent = create_agent(model=make_fake_model("A fairly short reply."), tools=[], checkpointer=InMemorySaver())
+    settings = _settings(summary_trigger_tokens=5000)
+    with TestClient(create_app(agent=agent, settings=settings)) as client:
+        ws, session, *_ = _connect(client)
+        session.send_json({"type": "message", "text": "hello there"})
+        events = _receive_until(session, "done", "error")
+        assert [e["type"] for e in events][-2:] == ["context", "done"]
+        context = events[-2]
+        assert context["max"] == 5000 and 0 < context["used"] < 5000
         ws.__exit__(None, None, None)
 
 
@@ -256,6 +322,8 @@ def test_socket_threads_and_bad_input(make_fake_model):
         session.send_json({"type": "new_thread"})
         new = session.receive_json()
         assert new["type"] == "thread" and new["id"] != "default" and new["history"] == []
+        context = session.receive_json()
+        assert context["type"] == "context" and context["used"] == 0 and context["max"] > 0
         session.send_json({"type": "thread", "id": "work"})
         assert session.receive_json()["id"] == "work"
         ws.__exit__(None, None, None)
@@ -530,7 +598,9 @@ def test_socket_cancel_stops_a_running_task_and_repairs_the_thread(make_fake_mod
         assert "cancel" in session.receive_json()["message"]
 
         session.send_json({"type": "cancel"})
-        assert session.receive_json() == {"type": "cancelled", "tools": ["long_job"]}
+        events = _receive_until(session, "cancelled")
+        assert events[-1] == {"type": "cancelled", "tools": ["long_job"]}
+        assert [e["type"] for e in events] == ["context", "cancelled"]  # meter first
         assert cancelled == ["report"]
 
         # The thread is usable again: the next message runs normally.
@@ -610,3 +680,84 @@ async def test_cancel_cleanup_clears_a_helpers_approval(make_fake_model):
     assert state.values["messages"][-1].text == CANCELLED
     out = await agent.ainvoke({"messages": [{"role": "user", "content": "hi"}]}, config)
     assert out["messages"][-1].text == "ok" and written == []
+
+
+# --- long-term memory panel ---------------------------------------------------------
+
+def _connect_with_memory(client):
+    ws, session, hello, thread = _connect(client)
+    assert session.receive_json() == {"type": "memory_inbox", "count": 0}  # after "context"
+    return ws, session, hello
+
+
+def test_socket_memory_panel_edits_and_undo(make_fake_model):
+    from luna.agent.longterm import LongTermStore
+
+    store = LongTermStore()
+    agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings(), memory_store=store)) as client:
+        ws, session, hello = _connect_with_memory(client)
+        assert hello["memory"] is True
+
+        session.send_json({"type": "memory_save", "text": "Prefers tea", "kind": "preference", "pinned": False})
+        listed = session.receive_json()
+        assert listed["type"] == "memories" and listed["suggestions"] == []
+        (m,) = listed["items"]
+        assert m["text"] == "Prefers tea" and m["kind"] == "preference"
+
+        session.send_json({"type": "memory_save", "id": m["id"], "text": "Prefers green tea", "kind": "preference", "pinned": True})
+        assert session.receive_json()["items"][0] | {"updated_at": None} == m | {
+            "text": "Prefers green tea", "pinned": True, "updated_at": None,
+        }
+        session.send_json({"type": "memory_history", "id": m["id"]})
+        history = session.receive_json()
+        assert history["type"] == "memory_history" and [e["action"] for e in history["entries"]] == ["edit", "add"]
+
+        session.send_json({"type": "memory_delete", "id": m["id"]})
+        assert session.receive_json()["items"] == []
+        session.send_json({"type": "memory_undo", "id": m["id"]})
+        assert session.receive_json()["items"][0]["text"] == "Prefers green tea"
+
+        # Bad requests are memory_error, which doesn't end a run in the browser.
+        session.send_json({"type": "memory_delete", "id": 999})
+        assert session.receive_json()["type"] == "memory_error"
+        session.send_json({"type": "memory_save", "text": "", "kind": "fact", "pinned": False})
+        assert session.receive_json()["type"] == "memory_error"
+        ws.__exit__(None, None, None)
+
+
+def test_socket_suggestions_from_a_run_reach_the_inbox(make_fake_model):
+    from luna.agent.longterm import LongTermMemoryMiddleware, LongTermStore
+
+    store = LongTermStore()
+    model = make_fake_model(tool_call("remember", text="Has a dog named Bruno", kind="person"), "Noted, Sir.")
+    agent = create_agent(
+        model=model, tools=[], checkpointer=InMemorySaver(), middleware=[LongTermMemoryMiddleware(store)]
+    )
+    with TestClient(create_app(agent=agent, settings=_settings(), memory_store=store)) as client:
+        ws, session, _ = _connect_with_memory(client)
+        session.send_json({"type": "message", "text": "my dog Bruno says hi"})
+        events = _receive_until(session, "done", "error")
+        assert [e["type"] for e in events][-3:] == ["memory_inbox", "context", "done"]
+        assert events[-3]["count"] == 1
+        assert store.list() == []  # only a suggestion so far
+
+        session.send_json({"type": "memories"})
+        (s,) = session.receive_json()["suggestions"]
+        assert s["action"] == "add" and s["thread_id"] == "default"
+
+        session.send_json({"type": "suggestion_accept", "id": s["id"], "text": "Has a beagle named Bruno"})
+        listed = session.receive_json()
+        assert [m["text"] for m in listed["items"]] == ["Has a beagle named Bruno"] and listed["suggestions"] == []
+        assert session.receive_json() == {"type": "memory_inbox", "count": 0}  # told to every tab
+        ws.__exit__(None, None, None)
+
+
+def test_socket_memory_off(make_fake_model):
+    agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, session, hello, _ = _connect(client)
+        assert hello["memory"] is False
+        session.send_json({"type": "memories"})
+        assert session.receive_json()["type"] == "memory_error"
+        ws.__exit__(None, None, None)

@@ -40,10 +40,11 @@ in the dock for hands-free use.
 | Hands-free | **WAKE** on: the mic stays open; start with **"Hey Luna, …"** (or just "Hey Luna", wait for "Yes?") |
 | Push-to-talk | **Space** or the big button: one utterance, no wake word. Space again ends it early. |
 | Interrupt her | say "Luna, …" while she talks (or press Space) |
-| Hush | **Esc**, or say "stop" / "quiet" |
-| Cancel the task | say **"Luna, cancel"** / "never mind", or the ABORT button |
+| Hush | **Esc** (when no task is running), or say "stop" / "quiet" |
+| Stop the task | **Esc** while a task runs, the STOP button, or say **"Luna, cancel"** / "never mind". Stops the main agent and any helpers and logs INTERRUPTED in NEURAL ACTIVITY. STOP also abandons an open approval/question; Esc does not. |
 | Type instead | **/** or TYPE |
 | Transcript / chat | **T** or LOG (also new thread, switch thread) |
+| Long-term memory | **K** or MEMORY (badge = Luna's suggestions waiting). Inbox: accept / edit / decline. Saved: search, add, edit, pin, delete, history + undo. See `docs/memory.md` |
 | Mute voice + sounds | VOICE |
 | Switch model / provider | **M**, or click `UPLINK · …` (top right) or LINK in SUBSYSTEMS |
 | Approve a risky action | say "approve" / "yes, go ahead", or "deny" / "no"; or click AUTHORIZE / MODIFY / DENY |
@@ -54,6 +55,25 @@ Core colors: cyan = standing by, bright cyan = listening, violet =
 processing, pale cyan = speaking, amber = waiting for your approval,
 red = error, grey = no connection. Each helper subagent that is working
 shows as a satellite orbiting the core and lights up in SUBSYSTEMS.
+
+HUD details:
+
+- **Captions** stay in the free space between the side panels and wrap.
+  With the transcript (T) open, Luna's reply and your last line are hidden
+  from the center (the drawer shows them); live speech and warnings still
+  show, left of the drawer.
+- **AGENTS** (SUBSYSTEMS): the agent that is running glows and reads
+  WORKING instead of its role.
+- **NEURAL ACTIVITY**: each helper's steps (RUN COMMAND, WRITE FILE, …)
+  are indented under the DEPLOY … entry that started them, oldest first;
+  past five, older steps fold into "+N EARLIER". Top-level entries stay
+  newest first.
+- **Truncated text** (MODEL, activity lines): hover for the full text,
+  click (or Enter) to expand/collapse.
+- **CONTEXT** (SUBSYSTEMS): tokens in the current thread's history /
+  `LUNA_SUMMARY_TRIGGER_TOKENS` (the point where older messages get
+  summarized; 128K if summarizing is off). Amber above 70 %, red above 90 %.
+  Updated on connect, thread switch and at the end of every run.
 
 ## Voice commands
 
@@ -184,20 +204,25 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 
 | type | fields | when |
 | --- | --- | --- |
-| `hello` | `provider`, `model`, `providers: [{id, label, configured, default_model}]`, `can_switch`, `tools`, `helpers`, `budget`, `tts` (`"piper"` or `"browser"`), `stt` (`"whisper"` or `"browser"`) | on connect |
+| `hello` | `provider`, `model`, `providers: [{id, label, configured, default_model}]`, `can_switch`, `tools`, `helpers`, `budget`, `tts` (`"piper"` or `"browser"`), `stt` (`"whisper"` or `"browser"`), `memory` (long-term memory on) | on connect |
 | `model` | `provider`, `model` | the model was switched (sent to every tab) |
 | `models` | `provider`, `models`, `error`? | reply to `models` |
 | `thread` | `id`, `history: [{role: "user"\|"luna", text}]` | on connect and after a thread switch |
 | `threads` | `ids` (newest first) | reply to `threads` |
 | `state` | `value: "thinking"` | a run started |
 | `token` | `text` | main agent reply text, streamed |
-| `tool_call` | `id`, `name`, `args`, `depth` | any agent called a tool (`depth` 0 = main, 1 = helper) |
-| `tool_result` | `id`, `name`, `preview` (≤ 240 chars), `depth` | a tool returned |
-| `notice` | `text`, `depth` | middleware message, e.g. a limit was reached |
+| `tool_call` | `id`, `name`, `args`, `depth`, `parent`? | any agent called a tool (`depth` 0 = main, 1 = helper) |
+| `tool_result` | `id`, `name`, `preview` (≤ 240 chars), `depth`, `parent`? | a tool returned |
+| `notice` | `text`, `depth`, `parent`? | middleware message, e.g. a limit was reached |
+| `context` | `used`, `max` | approximate tokens in the thread history vs. the summarization point; sent right after `thread`, and just before each run's `done` / `pause` / `cancelled` / `error` |
 | `pause` | `pauses: [...]` | the run stopped for you (see below); also sent on connect if a pause is still open |
 | `done` | | the task finished |
 | `cancelled` | `tools` (tool calls that were closed) | after `cancel` |
 | `error` | `message` | the run failed or a message was invalid; the socket stays open |
+| `memories` | `items: [{id, text, kind, pinned, created_at, updated_at}]`, `suggestions: [{id, action: "add"\|"update"\|"forget", target_id, target_text, text, kind, reason, thread_id, created_at}]` | reply to `memories` and to every memory / suggestion change |
+| `memory_inbox` | `count` | pending suggestions; after `context` on sync, before each run's `context` + final event, and to every tab after a suggestion is accepted or declined (only when memory is on) |
+| `memory_history` | `id`, `entries: [{action, before, after, source, at, undone}]` | reply to `memory_history`, newest first |
+| `memory_error` | `message` | a memory request failed (unknown id, empty text, memory off). Unlike `error`, it doesn't end a run |
 
 A pause is one of:
 
@@ -206,6 +231,13 @@ A pause is one of:
 {"id": "...", "kind": "approval", "actions": [{"name": "write_file", "args": {...}, "description": "...", "allowed": ["approve", "edit", "reject"]}]}
 {"id": "...", "kind": "other", "text": "..."}
 ```
+
+`parent` is present on helper events (`depth` ≥ 1): the `id` of the
+`ask_*` call they run under, or `null` if unknown. The delegate tool puts
+its call id in the helper run's metadata (`PARENT_CALL_METADATA` in
+`agent/subagents/base.py`); `EventTranslator` reads it from the helper's
+first streamed `messages` event and maps the helper's namespace to it, so
+parallel helpers nest correctly.
 
 Note: when an approval is resumed, the approval middleware re-sends the
 same `tool_call` (same `id`). The browser updates the existing entry.
@@ -230,6 +262,13 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 | `threads` | | list saved threads |
 | `models` | `provider` | list that provider's models |
 | `set_model` | `provider`, `model` (empty = provider default) | rebuild the agent with that model; `error` if e.g. the key is missing |
+| `memories` | | list memories and pending suggestions |
+| `memory_save` | `id`? (none = add), `text`, `kind` (`fact`, `preference`, `person`, `project`), `pinned` | add or change a memory |
+| `memory_delete` / `memory_undo` / `memory_history` | `id` | soft-delete; revert the newest change (repeat to go further back); list changes |
+| `suggestion_accept` | `id`, `text`? (your own wording) | apply a suggestion |
+| `suggestion_reject` | `id` | decline; Luna can't suggest the same thing again |
+
+Memory messages work while a task is running: they don't touch the run.
 
 Replies: a question takes `{"answer": "text"}` (or a bare string). An
 approval takes `{"decisions": [d, ...]}`, one per action, or a single one
@@ -253,7 +292,8 @@ src/lib/audio.ts         mic meter, shared `live` values the core reads, UI soun
 src/lib/theme.ts         phases → colors / energy, helper codenames
 src/core/                the 3D core (React Three Fiber, shaders, bloom)
 src/components/          HUD, captions, dock, command line, chat drawer, pause card,
-                         boot, ModelSwitcher (provider/model popover)
+                         boot, ModelSwitcher (provider/model popover),
+                         MemoryPanel (long-term memory: inbox + saved)
 ```
 
 Tests: `cd web && npm test` (vitest, pure modules) and `uv run pytest tests/test_web.py`.

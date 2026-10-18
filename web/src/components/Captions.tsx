@@ -1,6 +1,8 @@
 // Subtitles under the core: what you said and Luna's reply as it streams.
 // Voice-first: only the tail of a long reply is shown; the transcript
-// drawer has everything.
+// drawer has everything. The block stays between the side panels and wraps;
+// with the drawer open (`beside`) App passes no user/luna text, so only live
+// speech and notices show, in the space left of the drawer.
 import { AnimatePresence, motion } from "motion/react";
 import { cleanForSpeech } from "../lib/speech";
 
@@ -18,12 +20,14 @@ interface Props {
   luna?: string;
   interim?: string;
   notice?: string;
+  /** the transcript drawer is open */
+  beside?: boolean;
 }
 
-export function Captions({ user, luna, interim, notice }: Props) {
+export function Captions({ user, luna, interim, notice, beside }: Props) {
   const you = interim || user;
   return (
-    <div className="captions" aria-live="polite">
+    <div className={`captions ${beside ? "beside" : ""}`} aria-live="polite">
       <AnimatePresence mode="popLayout">
         {you && (
           <motion.div

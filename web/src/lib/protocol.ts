@@ -21,6 +21,49 @@ export interface ProviderInfo {
   default_model: string;
 }
 
+/** One long-term memory (src/luna/agent/longterm.py). Only the user changes these. */
+export interface Memory {
+  id: number;
+  text: string;
+  kind: MemoryKind;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MemoryKind = "fact" | "preference" | "person" | "project";
+
+/** Something Luna proposed; nothing changes until the user accepts it. */
+export interface MemorySuggestion {
+  id: number;
+  action: "add" | "update" | "forget";
+  target_id: number | null;
+  /** current text of the memory an update / forget is about */
+  target_text: string | null;
+  text: string;
+  kind: MemoryKind;
+  reason: string;
+  thread_id: string | null;
+  created_at: string;
+}
+
+interface MemorySnapshot {
+  text: string;
+  kind: MemoryKind;
+  pinned: number;
+  deleted_at: string | null;
+}
+
+export interface MemoryHistoryEntry {
+  action: "add" | "edit" | "pin" | "unpin" | "delete";
+  before: MemorySnapshot | null;
+  after: MemorySnapshot | null;
+  /** "user" or "suggestion s<id>" */
+  source: string;
+  at: string;
+  undone: boolean;
+}
+
 export type ServerEvent =
   | {
       type: "hello";
@@ -35,6 +78,8 @@ export type ServerEvent =
       tts: "piper" | "browser";
       /** "whisper": send utterances to /api/stt (wake word on); "browser": Web Speech */
       stt: "whisper" | "browser";
+      /** long-term memory is on (Memory panel available) */
+      memory?: boolean;
     }
   | { type: "cancelled"; tools: string[] }
   | { type: "model"; provider: string; model: string }
@@ -43,12 +88,27 @@ export type ServerEvent =
   | { type: "threads"; ids: string[] }
   | { type: "state"; value: "thinking" }
   | { type: "token"; text: string }
-  | { type: "tool_call"; id?: string | null; name: string; args: Record<string, unknown>; depth: number }
-  | { type: "tool_result"; id?: string | null; name?: string | null; preview: string; depth: number }
-  | { type: "notice"; text: string; depth: number }
+  // Helper events (depth >= 1) carry `parent`: the ask_* call they run under.
+  | {
+      type: "tool_call";
+      id?: string | null;
+      name: string;
+      args: Record<string, unknown>;
+      depth: number;
+      parent?: string | null;
+    }
+  | { type: "tool_result"; id?: string | null; name?: string | null; preview: string; depth: number; parent?: string | null }
+  | { type: "notice"; text: string; depth: number; parent?: string | null }
+  /** thread history tokens vs. where it gets summarized; sent on sync and before each run's last event */
+  | { type: "context"; used: number; max: number }
   | { type: "pause"; pauses: Pause[] }
   | { type: "done" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  // Long-term memory panel. memory_error never ends a run (unlike error).
+  | { type: "memories"; items: Memory[]; suggestions: MemorySuggestion[] }
+  | { type: "memory_inbox"; count: number }
+  | { type: "memory_history"; id: number; entries: MemoryHistoryEntry[] }
+  | { type: "memory_error"; message: string };
 
 export type Decision =
   | { type: "approve" }
@@ -66,4 +126,13 @@ export type ClientMessage =
   | { type: "thread"; id: string }
   | { type: "threads" }
   | { type: "models"; provider: string }
-  | { type: "set_model"; provider: string; model: string };
+  | { type: "set_model"; provider: string; model: string }
+  | { type: "memories" }
+  /** no id = add a new memory */
+  | { type: "memory_save"; id?: number; text: string; kind: MemoryKind; pinned: boolean }
+  | { type: "memory_delete"; id: number }
+  | { type: "memory_undo"; id: number }
+  | { type: "memory_history"; id: number }
+  /** text = accept in the user's own words */
+  | { type: "suggestion_accept"; id: number; text?: string }
+  | { type: "suggestion_reject"; id: number };

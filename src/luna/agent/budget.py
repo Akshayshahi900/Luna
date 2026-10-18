@@ -40,6 +40,8 @@ class TaskBudget:
 
     limit: int
     used: int = 0
+    # Long-term memory suggestions made for this message (luna/agent/longterm.py).
+    memory_suggestions: int = 0
 
     @property
     def remaining(self) -> int:

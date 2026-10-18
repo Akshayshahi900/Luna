@@ -24,6 +24,17 @@ POST /api/stt (16 kHz WAV of one utterance) → {"text"} from Whisper
 (luna/voice/stt.py); the browser does voice activity detection and the
 "Hey Luna" wake word.
 
+Context meter: on every sync and at the end of every run (just before
+done / pause / cancelled / error) the server sends
+{"type": "context", "used", "max"}: the thread history's approximate token
+count and the point where it gets summarized (summary_trigger_tokens).
+
+Long-term memory (luna/agent/longterm.py): the Memory panel lists, edits
+and undoes memories and answers Luna's suggestions with memory_* /
+suggestion_* messages; the server answers with {"type": "memories", ...}
+and tells every tab the inbox size ({"type": "memory_inbox", "count"}) on
+sync, after each run and after every memory change.
+
 A run happens in a background task, so the socket keeps listening: a
 {"type": "cancel"} stops it, and cancel_cleanup() gives every unanswered
 tool call a "Cancelled by the user." result so the thread stays valid.
@@ -45,6 +56,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from langchain_core.messages import ToolMessage
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.types import Command, Interrupt
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -55,6 +67,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from luna.agent.budget import TaskBudget
 from luna.agent.builder import assemble_agent, load_mcp_groups, recursion_limit
+from luna.agent.longterm import LongTermStore, MemoryRefused, open_longterm_store
 from luna.agent.memory import close_checkpointers, create_checkpointer
 from luna.agent.providers import describe_providers, get_provider, list_models, make_model
 from luna.agent.runner import run_task
@@ -69,6 +82,8 @@ from luna.web.events import EventTranslator, build_answer, describe_pause
 DIST_DIR = PROJECT_ROOT / "web" / "dist"
 # How many past messages to send when a tab connects or switches thread.
 HISTORY_LIMIT = 40
+# Context meter ceiling when summarization is off (LUNA_SUMMARY_TRIGGER_TOKENS=0).
+CONTEXT_FALLBACK_TOKENS = 128_000
 
 _NO_BUILD_PAGE = """<!doctype html><meta charset="utf-8"><title>Luna</title>
 <body style="background:#02060c;color:#7fe9ff;font-family:monospace;padding:3rem">
@@ -112,6 +127,8 @@ class AgentHost:
         # Voice engines for /api/tts and /api/stt (luna/voice/), or None.
         self.tts: Any = None
         self.stt: Any = None
+        # Long-term memory shared by every tab (None = turned off).
+        self.memory: LongTermStore | None = None
         # Every open tab's send function, told when the model changes.
         self.listeners: set[Callable[[dict], None]] = set()
 
@@ -133,6 +150,14 @@ class AgentHost:
             self.provider, self.model = provider, model
         for send in list(self.listeners):
             send(self.info())
+
+    def broadcast_inbox(self) -> None:
+        """Tell every tab how many memory suggestions are waiting."""
+        if self.memory is None:
+            return
+        event = {"type": "memory_inbox", "count": self.memory.pending_count()}
+        for send in list(self.listeners):
+            send(event)
 
 
 CANCELLED = "Cancelled by the user."
@@ -160,6 +185,11 @@ async def cancel_cleanup(agent: Any, config: dict[str, Any]) -> list[str]:
             as_node="tools",
         )
     return [c["name"] for c in missing]
+
+
+MEMORY_MESSAGES = {
+    "memory_save", "memory_delete", "memory_undo", "memory_history", "suggestion_accept", "suggestion_reject",
+}
 
 
 class Session:
@@ -215,10 +245,70 @@ class Session:
             if m.type in {"human", "ai"} and m.text
         ][-HISTORY_LIMIT:]
         self.send({"type": "thread", "id": self.thread_id, "history": history})
+        self.send(self._context(messages))
+        self._send_inbox()
         self._set_pending(list(state.interrupts) if state else [])
         if self.pending:
             self.budget = TaskBudget(limit=self.settings.task_budget)
             self.send({"type": "pause", "pauses": list(self.pending.values())})
+
+    def _context(self, messages: list[Any]) -> dict:
+        """The context meter: thread history tokens vs. the summarization point.
+
+        Counted the way SummarizationMiddleware counts by default, so the bar
+        fills up to where older messages get summarized.
+        """
+        limit = self.settings.summary_trigger_tokens or CONTEXT_FALLBACK_TOKENS
+        return {"type": "context", "used": count_tokens_approximately(messages), "max": limit}
+
+    def _send_inbox(self) -> None:
+        if self.host.memory is not None:
+            self.send({"type": "memory_inbox", "count": self.host.memory.pending_count()})
+
+    def _memories(self) -> dict:
+        store = self.host.memory
+        return {"type": "memories", "items": store.list(), "suggestions": store.suggestions()}
+
+    def _handle_memory(self, kind: str, msg: dict) -> None:
+        """Memory panel requests. They don't touch the run, so they work while
+        busy, and failures are memory_error (not error, which ends a run in the UI)."""
+        store = self.host.memory
+        if store is None:
+            return self.send({"type": "memory_error", "message": "Long-term memory is off."})
+        try:
+            if kind == "memory_save":
+                kind_ = str(msg.get("kind") or "fact")
+                pinned = bool(msg.get("pinned", False))
+                if msg.get("id") is None:
+                    store.add(str(msg.get("text", "")), kind_, pinned)
+                else:
+                    store.edit(int(msg["id"]), text=str(msg.get("text", "")), kind=kind_, pinned=pinned)
+            elif kind == "memory_delete":
+                store.delete(int(msg.get("id")))
+            elif kind == "memory_undo":
+                store.undo(int(msg.get("id")))
+            elif kind == "memory_history":
+                memory_id = int(msg.get("id"))
+                return self.send({"type": "memory_history", "id": memory_id, "entries": store.history(memory_id)})
+            elif kind == "suggestion_accept":
+                text = msg.get("text")
+                store.accept(int(msg.get("id")), str(text) if text else None)
+            elif kind == "suggestion_reject":
+                store.reject(int(msg.get("id")))
+        except (MemoryRefused, TypeError, ValueError) as exc:
+            return self.send({"type": "memory_error", "message": str(exc) or "Bad memory request."})
+        self.send(self._memories())
+        if kind.startswith("suggestion_"):
+            self.host.broadcast_inbox()
+
+    async def _send_context(self, agent: Any, config: dict[str, Any]) -> None:
+        if agent.checkpointer is None:
+            return
+        try:
+            state = await agent.aget_state(config)
+        except Exception:  # noqa: BLE001 — the meter is cosmetic; never fail a run over it
+            return
+        self.send(self._context(state.values.get("messages", [])))
 
     async def _run(self, payload: Any) -> None:
         self.send({"type": "state", "value": "thinking"})
@@ -229,14 +319,19 @@ class Session:
             closed = await cancel_cleanup(agent, config)
             self.pending = {}
             self.budget = None
+            await self._send_context(agent, config)
             self.send({"type": "cancelled", "tools": closed})
             return
         except Exception as exc:  # noqa: BLE001 — report to the browser, keep the socket open
             self.pending = {}
             self.budget = None
+            await self._send_context(agent, config)
             self.send({"type": "error", "message": str(exc) or type(exc).__name__})
             return
         self._set_pending(interrupts)
+        # Before the final event, so the browser has it when the run ends.
+        self._send_inbox()
+        await self._send_context(agent, config)
         if self.pending:
             self.send({"type": "pause", "pauses": list(self.pending.values())})
         else:
@@ -312,6 +407,14 @@ class Session:
                 return self.send({"type": "error", "message": str(exc)})
             return
 
+        if kind == "memories":
+            if self.host.memory is None:
+                return self.send({"type": "memory_error", "message": "Long-term memory is off."})
+            return self.send(self._memories())
+
+        if kind in MEMORY_MESSAGES:
+            return self._handle_memory(kind, msg)
+
         if kind == "threads":
             threads = await list_threads(self.agent.checkpointer) if self.agent.checkpointer else []
             return self.send({"type": "threads", "ids": threads[::-1]})  # newest first
@@ -335,6 +438,8 @@ def _hello(host: AgentHost, settings: Settings) -> dict:
         # "whisper": send utterances to /api/stt (enables the wake word);
         # "browser": Chrome/Edge speech recognition
         "stt": "whisper" if host.stt is not None else "browser",
+        # Long-term memory panel available
+        "memory": host.memory is not None,
     }
 
 
@@ -431,14 +536,17 @@ async def _build_host(settings: Settings) -> AgentHost:
     model = make_model(settings)  # fails fast if the startup provider has no key
     checkpointer = await create_checkpointer(backend=settings.memory_backend, path=settings.checkpoint_path)
     mcp_groups = await load_mcp_groups(settings)
+    memory = open_longterm_store(settings)
 
     async def rebuild(provider: str, model_name: str) -> Any:
         new_model = make_model(settings, provider, model_name)
-        return (await assemble_agent(settings, new_model, checkpointer, mcp_groups))[0]
+        return (await assemble_agent(settings, new_model, checkpointer, mcp_groups, memory))[0]
 
-    agent, _ = await assemble_agent(settings, model, checkpointer, mcp_groups)
+    agent, _ = await assemble_agent(settings, model, checkpointer, mcp_groups, memory)
     default = get_provider(settings.provider).default_model(settings)
-    return AgentHost(agent, settings, settings.provider, default, rebuild)
+    host = AgentHost(agent, settings, settings.provider, default, rebuild)
+    host.memory = memory
+    return host
 
 
 def create_app(
@@ -447,9 +555,11 @@ def create_app(
     rebuild: Rebuild | None = None,
     tts_engine: Any = None,
     stt_engine: Any = None,
+    memory_store: LongTermStore | None = None,
 ) -> Starlette:
     """Build the web app. Pass ``agent`` (and optionally ``rebuild`` /
-    ``tts_engine`` / ``stt_engine``) to skip building the real ones (tests do)."""
+    ``tts_engine`` / ``stt_engine`` / ``memory_store``) to skip building the
+    real ones (tests do)."""
     settings = settings or get_settings()
 
     @asynccontextmanager
@@ -459,6 +569,7 @@ def create_app(
             default = get_provider(settings.provider).default_model(settings)
             host = AgentHost(agent, settings, settings.provider, default, rebuild)
             host.tts, host.stt = tts_engine, stt_engine
+            host.memory = memory_store
         else:
             host = await _build_host(settings)
             host.tts, host.stt = create_tts(settings), create_stt(settings)
@@ -472,6 +583,8 @@ def create_app(
                 task.cancel()
             if agent is None:
                 await close_checkpointers()
+                if host.memory is not None:
+                    host.memory.close()
 
     routes: list[Any] = [
         WebSocketRoute("/ws", luna_socket),

@@ -32,6 +32,7 @@ from langchain.agents.middleware import (
 )
 
 from luna.agent.budget import TaskBudgetMiddleware
+from luna.agent.longterm import LongTermMemoryMiddleware, LongTermStore, open_longterm_store
 from luna.agent.memory import create_checkpointer
 from luna.agent.persona import build_system_prompt
 from luna.agent.providers import make_model
@@ -101,7 +102,10 @@ async def build_tool_registry(
 
 
 def build_middleware(
-    settings: Settings, model: Any, interrupt_on: dict[str, Any] | None = None
+    settings: Settings,
+    model: Any,
+    interrupt_on: dict[str, Any] | None = None,
+    memory_store: LongTermStore | None = None,
 ) -> list[Any]:
     """Middleware that runs around each model / tool call (in this order).
 
@@ -113,6 +117,8 @@ def build_middleware(
       answers with what it already has.
     - Scratchpad: write_todos (plan) + write_note (facts), shown to the
       model on every call (see luna/agent/scratchpad.py).
+    - Long-term memory: pinned + matching memories shown on every call;
+      the agent can only suggest changes (see luna/agent/longterm.py).
     - Approval: ``interrupt_on`` lists main-agent tools (risky MCP tools)
       that pause for the user's OK before running.
     - Summarization: replaces old messages with a short summary so long
@@ -128,6 +134,15 @@ def build_middleware(
         TodoListMiddleware(),
         ScratchpadMiddleware(),
     ]
+    if memory_store is not None:
+        middleware.append(
+            LongTermMemoryMiddleware(
+                memory_store,
+                recall_limit=settings.memory_recall_limit,
+                max_chars=settings.memory_prompt_chars,
+                max_suggestions=settings.memory_max_suggestions,
+            )
+        )
     if interrupt_on:
         middleware.append(HumanInTheLoopMiddleware(interrupt_on=interrupt_on))
     if settings.summary_trigger_tokens > 0:
@@ -158,6 +173,7 @@ def recursion_limit(settings: Settings) -> int:
 
 async def build_agent(
     settings: Settings | None = None,
+    memory_store: LongTermStore | None = None,
 ) -> tuple[Any, ToolRegistry]:
     """Create the runnable LangGraph agent.
 
@@ -195,7 +211,12 @@ async def build_agent(
     # main agent, tagged → that subagent (see "agent" in config/mcp_servers.json).
     mcp_groups = await load_mcp_groups(settings)
 
-    return await assemble_agent(settings, model, checkpointer, mcp_groups)
+    # 4) Long-term memory — facts across threads. Pass ``memory_store`` to
+    # keep a handle (the CLI does, for /memory); otherwise it comes from settings.
+    if memory_store is None:
+        memory_store = open_longterm_store(settings)
+
+    return await assemble_agent(settings, model, checkpointer, mcp_groups, memory_store)
 
 
 async def assemble_agent(
@@ -203,6 +224,7 @@ async def assemble_agent(
     model: Any,
     checkpointer: Any,
     mcp_groups: dict[str | None, list[Any]],
+    memory_store: LongTermStore | None = None,
 ) -> tuple[Any, ToolRegistry]:
     """Wire an agent from parts that already exist.
 
@@ -218,10 +240,13 @@ async def assemble_agent(
         [make_delegate_tool(spec, model) for spec in get_subagent_specs(settings, mcp_groups)]
     )
 
-    # 4) Middleware — budget, loop limits, scratchpad, approval, summarization.
+    # 4) Middleware — budget, loop limits, scratchpad, long-term memory,
+    # approval, summarization.
     # Main-agent MCP tools that change things (send_*, delete_*, …) need approval.
     risky = [t.name for t in mcp_groups.get(None, []) if is_risky_tool_name(t.name)]
-    middleware = build_middleware(settings, model, needs_approval(risky, settings.auto_approve))
+    middleware = build_middleware(
+        settings, model, needs_approval(risky, settings.auto_approve), memory_store
+    )
 
     # 5) Wire everything into one agent graph.
     # create_agent already implements the "think → tool → think → answer" loop.

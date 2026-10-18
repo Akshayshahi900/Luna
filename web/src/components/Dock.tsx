@@ -1,6 +1,6 @@
 // Bottom controls: the big talk button plus a few toggles.
 import { motion } from "motion/react";
-import { CloseIcon, KeyboardIcon, LoopIcon, MicIcon, SpeakerIcon, TranscriptIcon } from "./icons";
+import { CloseIcon, KeyboardIcon, LoopIcon, MemoryIcon, MicIcon, SpeakerIcon, TranscriptIcon } from "./icons";
 
 interface Props {
   listening: boolean;
@@ -9,7 +9,7 @@ interface Props {
   /** local speech recognition: hands-free means "Hey Luna" wake word */
   wakeWord: boolean;
   voiceOut: boolean;
-  /** a task is running or waiting: show ABORT */
+  /** a task is running or waiting: show STOP */
   canAbort: boolean;
   onTalk: () => void;
   onHandsFree: () => void;
@@ -17,6 +17,11 @@ interface Props {
   onKeyboard: () => void;
   onTranscript: () => void;
   onAbort: () => void;
+  /** long-term memory is on: show the MEMORY button */
+  memory: boolean;
+  /** suggestions waiting for the user (badge) */
+  inbox: number;
+  onMemory: () => void;
 }
 
 export function Dock(p: Props) {
@@ -48,9 +53,13 @@ export function Dock(p: Props) {
       </motion.button>
 
       {p.canAbort ? (
-        <button className="dock-btn abort" onClick={p.onAbort} title="Cancel the current task (or say “Luna, cancel”)">
+        <button
+          className="dock-btn abort"
+          onClick={p.onAbort}
+          title="Stop the current task and its helpers (Esc, or say “Luna, cancel”)"
+        >
           <CloseIcon />
-          <span>ABORT</span>
+          <span>STOP</span>
         </button>
       ) : (
         <button className="dock-btn" onClick={p.onKeyboard} title="Type a command (/)">
@@ -62,6 +71,13 @@ export function Dock(p: Props) {
         <TranscriptIcon />
         <span>LOG</span>
       </button>
+      {p.memory && (
+        <button className="dock-btn" onClick={p.onMemory} title="Long-term memory (K)">
+          <MemoryIcon />
+          <span>MEMORY</span>
+          {p.inbox > 0 && <b className="dock-badge">{p.inbox}</b>}
+        </button>
+      )}
     </nav>
   );
 }
