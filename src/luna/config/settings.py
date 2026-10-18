@@ -25,14 +25,17 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # This file lives at: src/luna/config/settings.py
 # parents[0]=config, [1]=luna, [2]=src, [3]=project root (Luna/)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MCP_CONFIG = PROJECT_ROOT / "config" / "mcp_servers.json"
 DEFAULT_CHECKPOINT_PATH = PROJECT_ROOT / "data" / "luna_memory.sqlite"
+DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
 
 
 class Settings(BaseSettings):
@@ -63,9 +66,29 @@ class Settings(BaseSettings):
         default=(
             "You are Luna, a helpful assistant. "
             "Use tools when they help you answer accurately, "
-            "and remember prior turns in this conversation."
+            "and remember prior turns in this conversation. "
+            "Do quick things yourself; hand bigger self-contained jobs to your "
+            "ask_* helper tools, giving them every detail they need. "
+            "Ask the user only when you truly cannot proceed without them."
         ),
         description="Instructions the model always sees first",
+    )
+
+    # --- Loop limits (stop runaway think → tool → think loops) ---
+    max_model_calls: int = Field(
+        default=25,
+        description="Max model calls per user message; the run then ends cleanly",
+    )
+    max_tool_calls: int = Field(
+        default=40,
+        description="Max tool calls per user message; extra calls are refused",
+    )
+    task_budget: int = Field(
+        default=80,
+        description=(
+            "Max model calls for one user message across the main agent AND "
+            "all subagents together"
+        ),
     )
 
     # --- Memory (the notebook) ---
@@ -91,18 +114,53 @@ class Settings(BaseSettings):
     )
 
     # --- Tools ---
+    # Tavily web search (https://app.tavily.com). Unset = no researcher subagent.
+    tavily_api_key: str | None = Field(default=None, repr=False)
     mcp_config_path: Path = Field(
         default=DEFAULT_MCP_CONFIG,
         description="JSON file listing MCP servers to connect",
     )
     enable_builtin_tools: bool = Field(
         default=True,
-        description="Load calculator / time / echo tools from this repo",
+        description="Load calculator / time / ask_user tools from this repo",
     )
     enable_mcp_tools: bool = Field(
         default=True,
         description="Connect to MCP servers from mcp_servers.json",
     )
+
+    # --- Files / coding sandbox ---
+    # NoDecode: read these as plain comma-separated text, not JSON lists.
+    workspace_dirs: Annotated[list[Path], NoDecode] = Field(
+        default_factory=lambda: [DEFAULT_WORKSPACE],
+        description=(
+            "Comma-separated folders the files and coder helpers may touch. "
+            "Relative paths in tool calls resolve against the first one."
+        ),
+    )
+    auto_approve: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Comma-separated tool names that run WITHOUT asking you first, "
+            "e.g. 'write_file'. Leave empty to approve every risky action."
+        ),
+    )
+
+    @field_validator("workspace_dirs", "auto_approve", mode="before")
+    @classmethod
+    def _split_commas(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
+    @field_validator("workspace_dirs")
+    @classmethod
+    def _absolute_dirs(cls, value: list[Path]) -> list[Path]:
+        # Relative entries are relative to the project root, like other paths here.
+        return [
+            (p.expanduser() if p.expanduser().is_absolute() else PROJECT_ROOT / p).resolve()
+            for p in value
+        ]
 
     # --- Chat ---
     default_thread_id: str = Field(

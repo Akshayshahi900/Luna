@@ -28,6 +28,10 @@ Config file (default: config/mcp_servers.json)::
 That entry means: "start this command as a subprocess and talk to it."
 You can also use {"url": "https://..."} for remote HTTP MCP servers.
 
+Add "agent": "<name>" to a server to give its tools to that subagent
+instead of the main agent, e.g. "agent": "assistant" for calendar / mail
+servers (see split_by_agent below).
+
 Disable with LUNA_ENABLE_MCP_TOOLS=false.
 
 Read next: servers/demo_mcp_server.py (a tiny MCP server example).
@@ -36,6 +40,7 @@ Read next: servers/demo_mcp_server.py (a tiny MCP server example).
 from __future__ import annotations
 
 import json
+import re
 import warnings
 from pathlib import Path
 from typing import Any
@@ -59,6 +64,41 @@ def load_mcp_config(path: Path | str) -> dict[str, Any] | None:
         if "command" in server:
             server.setdefault("cwd", str(PROJECT_ROOT))
     return data
+
+
+def split_by_agent(config: dict[str, Any]) -> dict[str | None, dict[str, Any]]:
+    """Group servers by their optional ``"agent"`` tag.
+
+    ``{"mcpServers": {"gcal": {..., "agent": "assistant"}, "docs": {...}}}``
+    becomes ``{"assistant": {"mcpServers": {"gcal": ...}}, None: {"mcpServers": {"docs": ...}}}``.
+    Untagged servers (key None) belong to the main agent; a tag names the
+    subagent that gets those tools (e.g. "assistant" → ask_assistant).
+    The tag itself is removed before the config reaches MCPAdapter.
+    """
+    groups: dict[str | None, dict[str, Any]] = {}
+    for name, server in (config.get("mcpServers") or {}).items():
+        server = dict(server)
+        agent = server.pop("agent", None)
+        groups.setdefault(agent, {"mcpServers": {}})["mcpServers"][name] = server
+    return groups
+
+
+# Words in a tool name that mean it changes something outside Luna.
+_RISKY_WORDS = {
+    "send", "create", "update", "delete", "remove", "write", "edit", "post", "reply",
+    "cancel", "move", "modify", "insert", "upload", "archive", "add", "set", "submit",
+    "invite", "share", "trash", "patch", "put", "rename", "forward",
+}
+
+
+def is_risky_tool_name(name: str) -> bool:
+    """True if the tool name contains a word like send/create/delete.
+
+    Names are split on _ - . and camelCase, so 'send_email' and 'createEvent'
+    are risky but 'get_settings' is not.
+    """
+    words = re.split(r"[_\-.\s]+|(?<=[a-z0-9])(?=[A-Z])", name)
+    return any(word.lower() in _RISKY_WORDS for word in words if word)
 
 
 async def load_mcp_tools(config: dict[str, Any] | Path | str | None) -> list[Any]:
@@ -99,4 +139,4 @@ async def load_mcp_tools(config: dict[str, Any] | Path | str | None) -> list[Any
     return list(tools)
 
 
-__all__ = ["load_mcp_config", "load_mcp_tools"]
+__all__ = ["is_risky_tool_name", "load_mcp_config", "load_mcp_tools", "split_by_agent"]

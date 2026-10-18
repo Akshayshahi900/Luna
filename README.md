@@ -1,7 +1,9 @@
 # Luna
 
-Scalable LangGraph chatbot with conversation memory and pluggable tools
-(native `@tool` functions and MCP servers).
+A general assistant on LangGraph: one main agent that does quick work
+itself and hands bigger jobs to helper agents — **researcher** (web),
+**files**, **coder** and **assistant** (calendar / mail via MCP). Risky
+actions (writing files, running commands, sending things) ask you first.
 
 ## Quick start
 
@@ -13,9 +15,15 @@ uv sync
 cp env.example .env
 # Replace `your_openrouter_api_key_here` with your key in .env
 
-# 3. Chat
+# 3. Optional: web research — add LUNA_TAVILY_API_KEY (https://app.tavily.com)
+
+# 4. Chat
 uv run luna
 ```
+
+The files and coder helpers only touch `./workspace` unless you set
+`LUNA_WORKSPACE_DIRS`. When Luna wants to write, edit or run something you
+get `[a]pprove / [e]dit / [r]eject`.
 
 Run the tests (no API key needed, the model is faked):
 
@@ -40,4 +48,8 @@ It explains, in plain English:
 
 See `env.example` and `config/mcp_servers.json`.
 
-Design / implementation notes: [`spec/spec1.md`](spec/spec1.md).
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — how the pieces fit, one message end to end
+- [`DECISIONS.md`](DECISIONS.md) — why things are the way they are
+- Specs: [`spec1`](spec/spec1.md) (core agent), [`spec2`](spec/spec2.md)
+  (loop limits, when to use subagents), [`spec3`](spec/spec3.md) (helpers,
+  task budget, scratchpad, approval)

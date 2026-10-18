@@ -27,4 +27,4 @@ def test_huge_numbers_fail_fast(expression):
 
 
 def test_builtin_tool_names():
-    assert {t.name for t in get_builtin_tools()} == {"get_current_time", "calculator", "echo"}
+    assert {t.name for t in get_builtin_tools()} == {"get_current_time", "calculator", "ask_user"}

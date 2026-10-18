@@ -5,7 +5,8 @@
       "args": ["run", "python", "servers/demo_mcp_server.py"]
     },
     "langchain_docs": {
-      "url": "https://docs.langchain.com/mcp"
+      "url": "https://docs.langchain.com/mcp",
+      "agent": "researcher"
     }
   }
 }

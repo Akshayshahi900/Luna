@@ -27,6 +27,8 @@ from zoneinfo import ZoneInfo
 
 from langchain.tools import tool
 
+from luna.tools.builtin.ask_user import ask_user
+
 # Limits so a request like 9**9**9**9 can't freeze the process.
 _MAX_EXPONENT = 1000
 _MAX_INT_DIGITS = 1000
@@ -119,16 +121,6 @@ def calculator(expression: str) -> str:
     return str(result)
 
 
-@tool
-def echo(message: str) -> str:
-    """Echo back a message. Useful for smoke-testing the tool pipeline.
-
-    Args:
-        message: Text to repeat.
-    """
-    return message
-
-
 def get_builtin_tools() -> list:
     """Return the tools that ship with Luna (add new ones to this list)."""
-    return [get_current_time, calculator, echo]
+    return [get_current_time, calculator, ask_user]

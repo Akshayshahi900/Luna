@@ -220,7 +220,9 @@ Analogy:
 - Built-in tools = apps installed on your phone  
 - MCP tools = apps on another phone that your phone can call over a standard cable  
 
-`config/mcp_servers.json` lists those other programs:
+`config/mcp_servers.json` lists those other programs. It is **empty by
+default**; to try the demo server, copy the `demo` entry from
+`config/mcp_servers.example.json` into it:
 
 ```json
 {
@@ -232,6 +234,10 @@ Analogy:
   }
 }
 ```
+
+Add `"agent": "assistant"` (or `"researcher"`, `"files"`, `"coder"`) to a
+server to give its tools to that helper instead of the main agent — see
+`spec/spec3.md`.
 
 What `load_mcp_tools` does:
 
@@ -318,6 +324,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
    Type `/tools` to see names.
 
 3. **Turn MCP off**  
+   With the demo server added to `config/mcp_servers.json`, run  
    `LUNA_ENABLE_MCP_TOOLS=false uv run luna`  
    `/tools` should no longer show `reverse_text` / `word_count`.
 
@@ -331,7 +338,7 @@ Next turn, if you ask “double that”, the model can see “96” in history (
 | Symptom | Likely cause |
 | --- | --- |
 | Authentication error when chatting | Set `LUNA_OPENROUTER_API_KEY` in `.env` and check the key is valid |
-| MCP tools missing | Config empty, MCP disabled, or demo server failed to start |
+| MCP tools missing | Config empty (the default), MCP disabled, server failed to start, or the server is tagged for a helper |
 | Forgets everything after restart | Using `memory` backend instead of `sqlite` |
 | Forgets after `/new` | Expected — new `thread_id` |
 
