@@ -37,6 +37,7 @@ DEFAULT_MCP_CONFIG = PROJECT_ROOT / "config" / "mcp_servers.json"
 DEFAULT_CHECKPOINT_PATH = PROJECT_ROOT / "data" / "luna_memory.sqlite"
 DEFAULT_WORKSPACE = PROJECT_ROOT / "workspace"
 DEFAULT_VOICES_DIR = PROJECT_ROOT / "data" / "voices"
+DEFAULT_STT_DIR = PROJECT_ROOT / "data" / "models" / "whisper"
 
 
 class Settings(BaseSettings):
@@ -217,6 +218,29 @@ class Settings(BaseSettings):
         default=0.95,
         description="Piper speaking pace: < 1 faster, > 1 slower",
     )
+
+    # --- Voice input (web UI) ---
+    stt_engine: str = Field(
+        default="whisper",
+        description=(
+            "'whisper' (local, any browser, enables the 'Hey Luna' wake word) or "
+            "'browser' (Chrome/Edge recognition, no wake word)"
+        ),
+    )
+    stt_model: str = Field(
+        default="base.en",
+        description="Whisper model: tiny.en (fastest), base.en, small.en (most accurate)",
+    )
+    stt_models_dir: Path = Field(default=DEFAULT_STT_DIR, description="Where Whisper models are kept")
+    stt_threads: int = Field(default=4, description="CPU threads for Whisper")
+
+    @field_validator("stt_engine")
+    @classmethod
+    def _known_stt(cls, value: str) -> str:
+        value = value.strip().lower()
+        if value not in {"whisper", "browser"}:
+            raise ValueError("stt_engine must be 'whisper' or 'browser'")
+        return value
 
     @field_validator("tts_engine")
     @classmethod

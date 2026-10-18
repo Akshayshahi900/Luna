@@ -1,5 +1,8 @@
+import asyncio
 import dataclasses
 import time
+
+import pytest
 
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
@@ -76,3 +79,16 @@ async def test_command_runs_only_after_approval(tmp_path, make_fake_model):
     await run_turn(agent, "go", "t", settings, ask=ask)
 
     assert asked and (tmp_path / "ran.txt").exists()
+
+
+async def test_run_command_is_killed_when_the_task_is_cancelled(tmp_path):
+    """Cancelling from the web UI must not leave the shell command running."""
+    run_command = make_run_command([tmp_path])
+    marker = tmp_path / "still_running"
+    task = asyncio.create_task(run_command.ainvoke({"command": f"sleep 1.5 && touch {marker}"}))
+    await asyncio.sleep(0.3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(2)
+    assert not marker.exists()

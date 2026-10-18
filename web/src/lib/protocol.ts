@@ -33,7 +33,10 @@ export type ServerEvent =
       budget: number;
       /** "piper": fetch speech from /api/tts; "browser": speechSynthesis */
       tts: "piper" | "browser";
+      /** "whisper": send utterances to /api/stt (wake word on); "browser": Web Speech */
+      stt: "whisper" | "browser";
     }
+  | { type: "cancelled"; tools: string[] }
   | { type: "model"; provider: string; model: string }
   | { type: "models"; provider: string; models: string[]; error?: string }
   | { type: "thread"; id: string; history: { role: "user" | "luna"; text: string }[] }
@@ -57,6 +60,7 @@ export type PauseReply = { answer: string } | { decisions: Decision[] };
 
 export type ClientMessage =
   | { type: "message"; text: string }
+  | { type: "cancel" }
   | { type: "resume"; answers: Record<string, PauseReply> }
   | { type: "new_thread" }
   | { type: "thread"; id: string }

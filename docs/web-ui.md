@@ -4,7 +4,7 @@ A voice-first, sci-fi HUD for Luna. You talk; a 3D reactor core reacts
 (listening, processing, speaking); Luna answers out loud. Text chat is
 there too, in a side drawer, but it's secondary.
 
-Design and reasons: [`spec/spec4.md`](../spec/spec4.md), `DECISIONS.md` D15–D18.
+Design and reasons: [`spec/spec4.md`](../spec/spec4.md), `DECISIONS.md` D15–D23.
 
 ## Run it
 
@@ -24,33 +24,88 @@ cd web && npm run dev               # terminal 2: page on http://localhost:5173
 
 Vite proxies `/ws` and `/api` to `:8765` (override with `LUNA_BACKEND=http://host:port`).
 
-The first start downloads Luna's voice (Piper `en_US-lessac-medium`,
-~60 MB) into `data/voices/`, in the background; until it's ready, replies
-use the browser's voice.
+The first start downloads, in the background, Luna's voice (Piper
+`en_US-lessac-medium`, ~60 MB, into `data/voices/`) and her ears (Whisper
+`base.en`, ~140 MB, into `data/models/whisper/`). Both run locally on the
+CPU; nothing you say or hear leaves the machine, and it works in any
+modern browser (Chrome, Edge, Firefox, Safari).
 
-Use **Google Chrome or Edge** for voice input. Firefox has no speech
-recognition, and Chromium builds usually lack Google's speech keys (you get
-a `network` error). Without it the UI falls back to typing; replies are
-still spoken.
+The browser asks for microphone access the first time. Turn on **WAKE**
+in the dock for hands-free use.
 
 ## Using it
 
 | Do | How |
 | --- | --- |
-| Talk | **Space** or the big button. Talking while Luna speaks interrupts her. |
+| Hands-free | **WAKE** on: the mic stays open; start with **"Hey Luna, …"** (or just "Hey Luna", wait for "Yes?") |
+| Push-to-talk | **Space** or the big button: one utterance, no wake word. Space again ends it early. |
+| Interrupt her | say "Luna, …" while she talks (or press Space) |
 | Hush | **Esc**, or say "stop" / "quiet" |
+| Cancel the task | say **"Luna, cancel"** / "never mind", or the ABORT button |
 | Type instead | **/** or TYPE |
 | Transcript / chat | **T** or LOG (also new thread, switch thread) |
-| Conversation mode | CONVO: after each spoken reply Luna listens again |
 | Mute voice + sounds | VOICE |
 | Switch model / provider | **M**, or click `UPLINK · …` (top right) or LINK in SUBSYSTEMS |
 | Approve a risky action | say "approve" / "yes, go ahead", or "deny" / "no"; or click AUTHORIZE / MODIFY / DENY |
+| Steer instead of approving | "no, call it notes.md instead": the reason goes back to Luna |
 | Answer a question | just say (or type) the answer |
 
 Core colors: cyan = standing by, bright cyan = listening, violet =
 processing, pale cyan = speaking, amber = waiting for your approval,
 red = error, grey = no connection. Each helper subagent that is working
 shows as a satellite orbiting the core and lights up in SUBSYSTEMS.
+
+## Voice commands
+
+Handled in the browser, without the model (`web/src/lib/intent.ts`). Say
+them after "Hey Luna" (hands-free) or as one push-to-talk utterance; the
+whole utterance must be the command, so "cancel my 3pm meeting" still goes
+to Luna.
+
+| Say | Does |
+| --- | --- |
+| "stop", "quiet", "be quiet", "enough" | stop talking |
+| "cancel", "cancel that", "abort", "never mind", "forget it" | cancel the running task or the open approval/question |
+| "switch to Groq" / "use Ollama" / "change the model to OpenRouter" | switch provider (its default model) |
+| "new conversation", "start over", "new chat" | fresh thread |
+| "show / hide the transcript" | open / close the chat drawer |
+| "go to sleep", "stop listening" | turn hands-free off (Space wakes her) |
+
+## Listening (speech in)
+
+The browser records, the server transcribes:
+
+1. An AudioWorklet streams mic frames (~21 ms) to an energy-based voice
+   activity detector with an adaptive noise floor (`web/src/lib/vad.ts`):
+   speech starts after 60 ms above the floor, ends after 800 ms of
+   silence, and keeps 500 ms from before the start so the first syllable
+   isn't cut.
+2. Each utterance is resampled to 16 kHz WAV and sent to `POST /api/stt`.
+   The server runs **Whisper** (`faster-whisper`, int8 on CPU) with Silero
+   VAD filtering, prompted with "Hey Luna." so it spells her name right.
+   About 0.3 s for a short command on a laptop CPU.
+3. The browser decides what to do with the text:
+   - starts with the wake phrase ("Hey Luna", "Luna", and the ways
+     Whisper mishears it: "Lunar", "Hey-Lunar"…) → a command;
+   - otherwise only accepted during push-to-talk, in the **follow-up
+     window** (8 s after Luna replies, 10 s after a bare "Hey Luna"), or
+     never while Luna is talking;
+   - anything that's ≥ 70 % words Luna just said is her own echo → ignored.
+
+Echo cancellation is on (it keeps Luna's voice out of the mic); noise
+suppression and auto-gain are off: in testing they cut the start of
+utterances ("Hey Luna" lost), and Whisper handles noise itself.
+
+Measured (synthetic voices through a fake mic in headless Chrome): wake
+phrase + question, follow-up without the wake word, spoken approval, and
+"Luna, cancel" mid-task all worked end to end; chatter without the wake
+phrase was ignored. A strongly accented test voice was misheard by both
+`base.en` and `small.en` ("Approve" → "The Prius"); Luna then asks again
+rather than guessing. If you're often misheard, try `LUNA_STT_MODEL=small.en`
+(~2.5× slower).
+
+`LUNA_STT_ENGINE=browser` switches back to Chrome/Edge recognition (no
+wake word; WAKE becomes CONVO: listen again after each reply).
 
 ## Voice and the core
 
@@ -108,6 +163,10 @@ is `LUNA_PROVIDER`).
 | `LUNA_PROVIDER` | `openrouter` | Startup provider: `openrouter`, `groq` or `ollama` |
 | `LUNA_GROQ_API_KEY` / `LUNA_GROQ_MODEL` | — / `llama-3.3-70b-versatile` | Groq |
 | `LUNA_OLLAMA_BASE_URL` / `LUNA_OLLAMA_MODEL` | `http://localhost:11434/v1` / `qwen3:8b` | Ollama |
+| `LUNA_STT_ENGINE` | `whisper` | `whisper` (local, any browser, wake word) or `browser` (Chrome/Edge) |
+| `LUNA_STT_MODEL` | `base.en` | `tiny.en` (fastest), `base.en`, `small.en` (most accurate) |
+| `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Where Whisper models are kept |
+| `LUNA_STT_THREADS` | `4` | CPU threads for Whisper |
 | `LUNA_TTS_ENGINE` | `piper` | `piper` (local voice, core follows real audio) or `browser` |
 | `LUNA_TTS_VOICE` | `en_US-lessac-medium` | Piper voice, downloaded once |
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Where voices are kept |
@@ -125,7 +184,7 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 
 | type | fields | when |
 | --- | --- | --- |
-| `hello` | `provider`, `model`, `providers: [{id, label, configured, default_model}]`, `can_switch`, `tools`, `helpers`, `budget`, `tts` (`"piper"` or `"browser"`) | on connect |
+| `hello` | `provider`, `model`, `providers: [{id, label, configured, default_model}]`, `can_switch`, `tools`, `helpers`, `budget`, `tts` (`"piper"` or `"browser"`), `stt` (`"whisper"` or `"browser"`) | on connect |
 | `model` | `provider`, `model` | the model was switched (sent to every tab) |
 | `models` | `provider`, `models`, `error`? | reply to `models` |
 | `thread` | `id`, `history: [{role: "user"\|"luna", text}]` | on connect and after a thread switch |
@@ -137,6 +196,7 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 | `notice` | `text`, `depth` | middleware message, e.g. a limit was reached |
 | `pause` | `pauses: [...]` | the run stopped for you (see below); also sent on connect if a pause is still open |
 | `done` | | the task finished |
+| `cancelled` | `tools` (tool calls that were closed) | after `cancel` |
 | `error` | `message` | the run failed or a message was invalid; the socket stays open |
 
 A pause is one of:
@@ -154,6 +214,7 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 
 | Route | |
 | --- | --- |
+| `POST /api/stt` (body: 16 kHz mono 16-bit WAV, ≤ 30 s) | `{"text": "..."}` ("" if nothing was said). 400 bad audio, 403 foreign origin, 404 when STT is off |
 | `POST /api/tts` `{"text": "..."}` | WAV (16-bit mono) of one sentence. 400 for empty/over 1000 chars, 403 foreign origin, 404 when TTS is off, 500 if synthesis fails |
 | `GET /api/health` | `{status, provider, model}` |
 
@@ -161,9 +222,10 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 
 | type | fields | effect |
 | --- | --- | --- |
-| `message` | `text` | start a task (fresh task budget). Refused while a pause is open. |
+| `message` | `text` | start a task (fresh task budget). Refused while a task runs or a pause is open. |
+| `cancel` | | stop the running task, or abandon the open pause; every unanswered tool call gets the result "Cancelled by the user." so the thread stays valid. Shell commands are killed. |
 | `resume` | `answers: {pause_id: reply}` | answer **every** open pause; same budget continues |
-| `new_thread` | | switch to a fresh thread (uuid) |
+| `new_thread` | | switch to a fresh thread (uuid); refused while a task runs |
 | `thread` | `id` | switch to an existing or new thread |
 | `threads` | | list saved threads |
 | `models` | `provider` | list that provider's models |
@@ -184,7 +246,9 @@ src/lib/state.ts         pure reducer for server events (tested)
 src/lib/speech.ts        Speaker (Piper audio via /api/tts, browser voice fallback),
                          Listener (SpeechRecognition), cleanForSpeech + SentenceChunker (tested)
 src/lib/analysis.ts      VoiceAnalyser: loudness, bands, spectrum, onsets (tested)
-src/lib/intent.ts        "approve"/"deny"/"stop" voice commands (tested)
+src/lib/intent.ts        wake phrase, voice commands, approvals, echo check (tested)
+src/lib/vad.ts           utterance detection + 16 kHz WAV encoding (tested)
+src/lib/voiceInput.ts    mic + AudioWorklet (public/mic-worklet.js) → utterances → /api/stt
 src/lib/audio.ts         mic meter, shared `live` values the core reads, UI sounds
 src/lib/theme.ts         phases → colors / energy, helper codenames
 src/core/                the 3D core (React Three Fiber, shaders, bloom)
@@ -196,9 +260,13 @@ Tests: `cd web && npm test` (vitest, pure modules) and `uv run pytest tests/test
 
 ## Limits / next steps
 
-- Voice *input* runs in the browser (Web Speech API): Chrome/Edge only,
-  and Chrome sends audio to Google. A local STT (e.g. Whisper) endpoint
-  would remove both limits. Voice *output* is already local (Piper).
-- No wake word yet; conversation mode is the hands-free option.
-- A task can't be cancelled from the UI (cancelling mid-tool would leave
-  the thread with an unanswered tool call). "Stop" only silences speech.
+- The wake word works while the Luna page is open (a browser tab must
+  hold the mic). An always-on background listener would be a desktop app
+  or a small native service.
+- Hands-free starts after the ENGAGE click: browsers only allow audio
+  after a user gesture.
+- The terminal CLI has no voice.
+- Voice can't edit an action's arguments (use MODIFY, or deny with a
+  reason, which lets Luna redo it your way).
+- In a loud room the energy VAD records more; Whisper's own VAD turns
+  noise into empty text, which is ignored, but it costs CPU.

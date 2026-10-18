@@ -22,6 +22,8 @@ export interface LunaState {
   connected: boolean;
   provider?: string;
   model?: string;
+  /** which speech recognition the server offers */
+  stt: "whisper" | "browser";
   providers: ProviderInfo[];
   canSwitch: boolean;
   /** model ids per provider, as reported by the provider (may be empty) */
@@ -60,6 +62,7 @@ export const MAX_ACTIVITY = 30;
 export const initialState: LunaState = {
   connected: false,
   providers: [],
+  stt: "browser",
   canSwitch: false,
   models: {},
   switching: false,
@@ -95,6 +98,7 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
         ...state,
         provider: event.provider,
         model: event.model,
+        stt: event.stt ?? "browser",
         providers: event.providers,
         canSwitch: event.can_switch,
         tools: event.tools,
@@ -196,6 +200,14 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
 
     case "done":
       return finishReply(state);
+
+    case "cancelled":
+      return {
+        ...finishReply(state),
+        pauses: [],
+        activity: state.activity.map((a) => (a.status === "running" ? { ...a, status: "done" as const, preview: "cancelled" } : a)),
+        messages: [...state.messages, { id: nextId("n"), role: "system", text: "Cancelled." }],
+      };
 
     case "error":
       return { ...finishReply(state), error: event.message, switching: false };

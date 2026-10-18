@@ -12,7 +12,7 @@ actions (writing files, running commands, sending things) ask you first.
 uv sync
 
 # 2. Add your OpenRouter credentials to .env
-cp env.example .env
+cp .env.example .env
 # Replace `your_openrouter_api_key_here` with your key in .env
 
 # 3. Optional: web research — add LUNA_TAVILY_API_KEY (https://app.tavily.com)
@@ -28,8 +28,10 @@ cd web && npm install && npm run build && cd ..
 uv run luna-web          # open http://127.0.0.1:8765 in Chrome or Edge
 ```
 
-Luna speaks with a local Piper voice (downloaded once, ~60 MB) and the
-core animates to her actual voice. Press **Space** to talk, **T** for the chat transcript, **M** to switch
+Voice runs fully on your machine: Luna listens with Whisper and speaks
+with Piper (models download once, ~200 MB). Turn on **WAKE** and say
+**"Hey Luna, …"** for hands-free use; "Luna, cancel" stops a task. Or press
+**Space** to talk, **T** for the chat transcript, **M** to switch
 between OpenRouter, Groq and Ollama models. Details and dev
 setup: [`docs/web-ui.md`](docs/web-ui.md).
 
@@ -59,7 +61,7 @@ It explains, in plain English:
 
 ## Configuration
 
-See `env.example` and `config/mcp_servers.json`.
+See `.env.example` and `config/mcp_servers.json`.
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — how the pieces fit, one message end to end
 - [`DECISIONS.md`](DECISIONS.md) — why things are the way they are

@@ -15,6 +15,7 @@ command unless you list run_command in LUNA_AUTO_APPROVE (not recommended).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import signal
 from pathlib import Path
@@ -70,6 +71,11 @@ def make_run_command(roots: list[Path]) -> BaseTool:
             os.killpg(proc.pid, signal.SIGKILL)
             await proc.wait()
             return f"$ {command}\nTimed out after {timeout}s (killed)."
+        except asyncio.CancelledError:
+            # The user cancelled the task (web UI "cancel"): don't leave it running.
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(proc.pid, signal.SIGKILL)
+            raise
         output = _trim(raw.decode("utf-8", errors="replace")).rstrip()
         return f"$ {command}\n(exit code {proc.returncode})\n{output or '(no output)'}"
 

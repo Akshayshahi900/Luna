@@ -754,3 +754,7 @@ button:disabled { cursor: not-allowed; opacity: 0.4; }
   .switcher { right: 16px; top: 110px; }
   .link { font-size: 10px; }
 }
+
+/* Abort sits where TYPE is while a task runs */
+.dock-btn.abort { color: var(--red); border-color: rgba(255, 61, 106, 0.6); background: rgba(255, 61, 106, 0.08); }
+.dock-btn.abort:hover { color: #fff; background: var(--red); }

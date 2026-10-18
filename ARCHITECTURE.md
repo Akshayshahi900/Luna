@@ -61,8 +61,10 @@ Protocol: `docs/web-ui.md`.
 src/luna/
   cli/chat.py              REPL, printing, pause handling (run_turn, answer_interrupt)
   voice/tts.py             PiperTTS: local text-to-speech for the web UI (/api/tts)
+  voice/stt.py             WhisperSTT: local speech-to-text for the web UI (/api/stt)
   web/
-    server.py              luna-web: Starlette app, AgentHost (model switch), /ws Session,
+    server.py              luna-web: Starlette app, AgentHost (model switch), /ws Session
+                           (background runs, cancel + cancel_cleanup), /api/tts, /api/stt,
                            origin check, serves web/dist
     events.py              stream events → JSON; pause describe / answer conversion
   config/settings.py       all LUNA_* settings
@@ -100,5 +102,5 @@ spec/                      design specs; DECISIONS.md; this file
 
 ## Not built yet
 
-Long-term memory across threads (spec3 §9), local speech input (STT),
-a wake word, and cancelling a running task from the UI.
+Long-term memory across threads (spec3 §9), voice in the CLI, and a wake
+word that works without the web page open.

@@ -1,10 +1,10 @@
 # Spec 4 — Web UI: voice-first HUD
 
 **Date:** 2026-10-18  
-**Status:** Implemented.  
+**Status:** Implemented (incl. §4a model switching, §4b voice-synced core, §4c full voice control).  
 **Scope:** A browser interface for the existing agent. No agent behaviour changes.
 
-Builds on [spec3](spec3.md) (pauses, task budget). Decisions: [`DECISIONS.md`](../DECISIONS.md) D15–D18.
+Builds on [spec3](spec3.md) (pauses, task budget). Decisions: [`DECISIONS.md`](../DECISIONS.md) D15–D23.
 How to run + protocol: [`docs/web-ui.md`](../docs/web-ui.md).
 
 ---
@@ -114,12 +114,53 @@ formats the CLI produces, so the agent can't tell the two apart.
   0.06–0.77 across a sentence, ~3.4 onsets/s, and the bands move
   independently (fixed thresholds had pinned them at 1).
 
+## 4c. Full voice control: local STT, wake word, voice commands, cancel (added 2026-10-18)
+
+- **STT**: `luna/voice/stt.py` `WhisperSTT` (faster-whisper, int8, CPU,
+  greedy decoding, Silero VAD filter, prompt "Hey Luna."). `POST /api/stt`
+  takes one 16 kHz WAV utterance (≤ 30 s). Benchmarked on an i5-12450H:
+  base.en ≈ 4.5× real time (~0.3 s per command), small.en ≈ 2.3×.
+- **Utterances** are cut in the browser (`vad.ts`: energy VAD, adaptive
+  floor, 60 ms start, 800 ms end, 500 ms pre-roll, 15 s cap) from
+  AudioWorklet frames (`voiceInput.ts`, `public/mic-worklet.js`).
+- **Wake word = transcript check**, no extra model: the name must open the
+  utterance; Whisper's misspellings are accepted. Prompting made the
+  difference: wake phrases found 6/12 → 11/12 (base.en) and 12/12 with the
+  start-anchored fuzzy match, 0/8 false wakes on near-misses.
+- **When speech counts** (browser): push-to-talk utterance; wake-prefixed;
+  inside the follow-up window (8 s after a reply / 10 s after "Hey Luna");
+  never un-prefixed while Luna speaks; never if it echoes her recent words.
+- **Voice commands** (`intent.ts`): hush, cancel, switch provider, new
+  thread, transcript, sleep — whole-utterance matches only. Spoken
+  denials keep their reason.
+- **Cancel**: runs are background tasks per session; `cancel` cancels the
+  task, then `cancel_cleanup` writes "Cancelled by the user." results for
+  every unanswered tool call (as the tools node), which also clears any
+  approval pause — including one inside a helper. `run_command` kills its
+  process group on cancellation. While a run is in progress, `message`,
+  `resume` and thread switches are refused.
+- Mic constraints: echo cancellation on, noise suppression + auto gain off
+  (they cut utterance onsets in testing).
+- **Verified end to end** in headless Chrome with a fake mic fed by a
+  synthetic voice: ignored chatter, "Hey Luna, what is six times seven?",
+  follow-up "Save it." without the wake word, spoken "Approve." (file
+  written), "Luna, cancel" mid-tool (tool cancelled), "switch to Groq",
+  "start a new conversation".
+
 ## 5. Verification
 
 - `tests/test_web.py`: translator, pause description/answers, origin check,
   and the socket end to end with fake models (reply, question pause,
   approval reject, reconnect while paused, threads, bad input, foreign origin,
   model switch seen by every tab, switch errors, model listing).
+- `tests/test_web.py` also covers `/api/stt` (transcribe, bad audio,
+  wrong rate/channels/length, foreign origin, off), cancel (running task
+  + thread repaired, open approval, nothing running, a helper's approval)
+  and refusing conflicting messages while busy; `tests/test_coder.py`
+  checks a cancelled `run_command` is killed.
+- `web/src/lib/vad.test.ts` and `intent.test.ts`: utterance detection,
+  WAV encoding, wake phrase (incl. real Whisper misspellings), voice
+  commands, approvals with reasons, echo check.
 - `tests/test_web.py` also covers `/api/tts` (audio, bad input, foreign
   origin, engine off, engine failure) and TTS settings.
 - `web/src/lib/analysis.test.ts`: band layout, loudness curve, AutoRange,
@@ -133,5 +174,5 @@ formats the CLI produces, so the agent can't tell the two apart.
 
 ## 6. Not in scope
 
-Server-side speech *input* (e.g. Whisper), wake word, cancelling a running task,
+A background (tab-less) wake word, voice in the CLI,
 authentication for non-local use.

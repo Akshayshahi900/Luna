@@ -409,3 +409,204 @@ def test_tts_settings():
     assert engine is not None and engine.model_path.name == "en_GB-alba-medium.onnx"
     with pytest.raises(ValueError):
         _settings(tts_engine="espeak")
+
+
+# --- speech recognition (/api/stt) -------------------------------------------------
+
+def _wav(seconds=0.5, rate=16000, channels=1):
+    import io
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"\x00\x00" * int(seconds * rate) * channels)
+    return buf.getvalue()
+
+
+class _FakeSTT:
+    def __init__(self, text="Hey Luna. What time is it?"):
+        self.text = text
+        self.heard = []
+
+    async def atranscribe(self, samples, prompt=None):
+        self.heard.append(len(samples))
+        return self.text
+
+    async def warm_up(self):
+        pass
+
+
+def test_stt_endpoint_transcribes_wav(make_fake_model):
+    engine = _FakeSTT()
+    agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings(), stt_engine=engine)) as client:
+        ws, _, hello, _ = _connect(client)
+        assert hello["stt"] == "whisper"
+        ws.__exit__(None, None, None)
+
+        response = client.post("/api/stt", content=_wav(0.5), headers={"content-type": "audio/wav"})
+        assert response.json() == {"text": "Hey Luna. What time is it?"}
+        assert engine.heard == [8000]  # 0.5 s at 16 kHz
+
+        assert client.post("/api/stt", content=b"nope").status_code == 400
+        assert client.post("/api/stt", content=_wav(rate=44100)).status_code == 400  # must be 16 kHz
+        assert client.post("/api/stt", content=_wav(channels=2)).status_code == 400
+        assert client.post("/api/stt", content=_wav(seconds=31)).status_code == 400
+        foreign = client.post("/api/stt", content=_wav(), headers={"origin": "https://evil.example"})
+        assert foreign.status_code == 403
+
+
+def test_stt_off_means_browser_recognition(make_fake_model):
+    agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, _, hello, _ = _connect(client)
+        assert hello["stt"] == "browser"
+        ws.__exit__(None, None, None)
+        assert client.post("/api/stt", content=_wav()).status_code == 404
+
+
+def test_wav_to_samples_scales_to_float():
+    import io
+    import wave
+
+    from luna.voice.stt import wav_to_samples
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes((16384).to_bytes(2, "little", signed=True) + (-32768).to_bytes(2, "little", signed=True))
+    samples = wav_to_samples(buf.getvalue())
+    assert samples.dtype.name == "float32"
+    assert samples.tolist() == [0.5, -1.0]
+
+
+def test_stt_settings():
+    from luna.voice import create_stt
+
+    assert create_stt(_settings(stt_engine="browser")) is None
+    engine = create_stt(_settings(stt_engine="Whisper", stt_model="small.en"))
+    assert engine is not None and engine.model_name == "small.en"
+    with pytest.raises(ValueError):
+        _settings(stt_engine="vosk")
+
+
+# --- cancelling ------------------------------------------------------------------
+
+def _slow_agent(make_fake_model, started, cancelled):
+    import asyncio
+
+    @tool
+    async def long_job(title: str) -> str:
+        """A slow job."""
+        started.append(title)
+        try:
+            await asyncio.sleep(30)
+        except asyncio.CancelledError:
+            cancelled.append(title)
+            raise
+        return "finished"
+
+    model = make_fake_model(tool_call("long_job", title="report"), "ready for the next thing")
+    return create_agent(model=model, tools=[long_job], checkpointer=InMemorySaver())
+
+
+def test_socket_cancel_stops_a_running_task_and_repairs_the_thread(make_fake_model):
+    started, cancelled = [], []
+    agent = _slow_agent(make_fake_model, started, cancelled)
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, session, *_ = _connect(client)
+        session.send_json({"type": "message", "text": "run the report"})
+        _receive_until(session, "tool_call")
+
+        # While it runs, the socket still answers — and refuses conflicting requests.
+        session.send_json({"type": "message", "text": "and another"})
+        assert "Still working" in session.receive_json()["message"]
+        session.send_json({"type": "new_thread"})
+        assert "cancel" in session.receive_json()["message"]
+
+        session.send_json({"type": "cancel"})
+        assert session.receive_json() == {"type": "cancelled", "tools": ["long_job"]}
+        assert cancelled == ["report"]
+
+        # The thread is usable again: the next message runs normally.
+        session.send_json({"type": "message", "text": "hello"})
+        events = _receive_until(session, "done", "error")
+        assert events[-1]["type"] == "done"
+        assert "".join(e["text"] for e in events if e["type"] == "token") == "ready for the next thing"
+        ws.__exit__(None, None, None)
+
+
+def test_socket_cancel_abandons_an_open_approval(make_fake_model):
+    written = []
+
+    @tool
+    def write_file(path: str, content: str) -> str:
+        """Write a file."""
+        written.append(path)
+        return "ok"
+
+    model = make_fake_model(tool_call("write_file", path="a.md", content="x"), "what next?")
+    agent = create_agent(
+        model=model,
+        tools=[write_file],
+        checkpointer=InMemorySaver(),
+        middleware=[HumanInTheLoopMiddleware(interrupt_on={"write_file": True})],
+    )
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, session, *_ = _connect(client)
+        session.send_json({"type": "message", "text": "save"})
+        _receive_until(session, "pause")
+        session.send_json({"type": "cancel"})
+        assert session.receive_json() == {"type": "cancelled", "tools": ["write_file"]}
+
+        session.send_json({"type": "message", "text": "hi"})  # no longer "waiting for your answer"
+        assert _receive_until(session, "done", "error")[-1]["type"] == "done"
+        assert written == []
+        ws.__exit__(None, None, None)
+
+
+def test_socket_cancel_with_nothing_running(make_fake_model):
+    agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, session, *_ = _connect(client)
+        session.send_json({"type": "cancel"})
+        assert session.receive_json() == {"type": "cancelled", "tools": []}
+        ws.__exit__(None, None, None)
+
+
+async def test_cancel_cleanup_clears_a_helpers_approval(make_fake_model):
+    """A pause inside a subagent (ask_files → write_file) is cleared too."""
+    from luna.agent.subagents import SubagentSpec, make_delegate_tool
+    from luna.web.server import CANCELLED, cancel_cleanup
+
+    written = []
+
+    @tool
+    def write_file(path: str, content: str) -> str:
+        """Write a file."""
+        written.append(path)
+        return "ok"
+
+    helper = make_fake_model(tool_call("write_file", "w1", path="a.md", content="x"), "files done")
+    delegate = make_delegate_tool(
+        SubagentSpec(name="ask_files", description="Files.", system_prompt="p", tools=[write_file],
+                     model=helper, interrupt_on={"write_file": True}),
+        default_model=None,
+    )
+    agent = create_agent(model=make_fake_model(tool_call("ask_files", task="save"), "ok"), tools=[delegate],
+                         checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "t"}}
+    await agent.ainvoke({"messages": [{"role": "user", "content": "save"}]}, config)
+    assert len((await agent.aget_state(config)).interrupts) == 1
+
+    assert await cancel_cleanup(agent, config) == ["ask_files"]
+    state = await agent.aget_state(config)
+    assert state.interrupts == ()
+    assert state.values["messages"][-1].text == CANCELLED
+    out = await agent.ainvoke({"messages": [{"role": "user", "content": "hi"}]}, config)
+    assert out["messages"][-1].text == "ok" and written == []

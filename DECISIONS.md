@@ -144,3 +144,34 @@ starts after the first sentence instead of the whole reply. The browser
 voice stays as the fallback (`LUNA_TTS_ENGINE=browser`, or Piper failing).
 Band levels are normalized to their own recent peak instead of fixed
 thresholds, which pinned at 1 when measured. Cost: `piper-tts` is GPL-3.0.
+
+## D21 — Speech input is local Whisper; utterances are cut in the browser (2026-10-18, spec4 §4c)
+Supersedes the input half of D17. faster-whisper (CTranslate2, int8) runs
+on CPU on Windows, macOS and Linux, ~0.3 s per command with base.en, and
+makes voice input private and browser-independent. The browser does voice
+activity detection and sends one WAV per utterance (`POST /api/stt`)
+instead of streaming audio over the socket: simpler, no server-side
+streaming VAD state, and an HTTP request per utterance is cheap. Noise
+that slips past the browser's energy VAD is removed by Whisper's Silero
+VAD (it becomes empty text). The browser recognizer stays as a fallback
+(`LUNA_STT_ENGINE=browser`).
+
+## D22 — The wake word is a transcript check, not a keyword model (2026-10-18, spec4 §4c)
+Pre-trained wake-word models (openWakeWord) don't have "Luna", and
+training one is a project of its own. Since every utterance is already
+transcribed locally, "Hey Luna" is detected in the text: the name must be
+the first word(s), Whisper's misspellings ("Lunar", "Heilunar") count, and
+the prompt "Hey Luna." makes it spell the name right (6/12 → 12/12 found,
+0/8 false wakes in our test set). Cost: every utterance in the room is
+transcribed (CPU), and the page must be open. Follow-up windows avoid
+repeating the name in a conversation; anything echoing Luna's own recent
+words is ignored so she can't wake herself.
+
+## D23 — Tasks can be cancelled; cancel repairs the thread (2026-10-18, spec4 §4c)
+Replaces "cancelling mid-tool is out" (D15). A session runs each task in
+a background asyncio task. `cancel` cancels it, then gives every tool call
+without a result the result "Cancelled by the user." (written as the
+tools node), so the next model call sees a valid history; this also
+clears an open approval, including one inside a helper. `run_command`
+kills its process group when cancelled. Verified with a prototype before
+building: the follow-up message runs normally in all three cases.

@@ -116,11 +116,12 @@ export function ActivityFeed({ activity }: { activity: Activity[] }) {
 
 interface SystemProps {
   state: LunaState;
-  voiceIn: boolean;
+  /** WAKE WORD / WHISPER / BROWSER / TEXT ONLY */
+  voiceLabel: string;
   onModelClick: () => void;
 }
 
-export function SystemPanel({ state, voiceIn, onModelClick }: SystemProps) {
+export function SystemPanel({ state, voiceLabel, onModelClick }: SystemProps) {
   const helpers = state.helpers.length ? state.helpers : [];
   return (
     <section className="panel systems">
@@ -143,7 +144,7 @@ export function SystemPanel({ state, voiceIn, onModelClick }: SystemProps) {
         <dt>OPS</dt>
         <dd>{state.ops}</dd>
         <dt>VOICE IN</dt>
-        <dd className={voiceIn ? "ok" : "warn"}>{voiceIn ? "ACTIVE" : "TEXT ONLY"}</dd>
+        <dd className={voiceLabel === "TEXT ONLY" ? "warn" : "ok"}>{voiceLabel}</dd>
       </dl>
       <div className="panel-title small">
         <span>AGENTS</span>
