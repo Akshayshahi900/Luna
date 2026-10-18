@@ -357,3 +357,15 @@ HITL needs no new code: every changing tool name has a risky verb (D9).
 Ruled out: a community Google Workspace MCP server (dozens of tools in the
 assistant's context, no to-do sync or mail link), and failing at startup
 when not signed in (would drop the other servers in the group, D31).
+
+## D33 — Open-source under MIT, with CI on every PR (2026-10-18)
+Luna is published on GitHub under the MIT License (`LICENSE`, declared in
+`pyproject.toml`). Community files live at the repo root
+(`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) and GitHub-specific
+ones in `.github/` (issue / PR templates, `workflows/ci.yml`). CI runs
+`uv run pytest` and the web `npm test` + `npm run build` on every push to
+`main` and every pull request; it needs no secrets because the Python suite
+uses the fake chat model. Security reports go through private advisories,
+since the agent can run commands and act on the user's Google account.
+Ruled out: a copyleft licence (friction for people embedding the agent) and
+CI that calls a real LLM (costs free-tier limits, needs secrets in forks).

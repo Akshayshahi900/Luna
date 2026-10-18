@@ -45,6 +45,7 @@ class TaskBudget:
 
     @property
     def remaining(self) -> int:
+        """Model calls still allowed for this user message."""
         return max(self.limit - self.used, 0)
 
 

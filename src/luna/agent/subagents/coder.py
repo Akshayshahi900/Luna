@@ -45,6 +45,7 @@ DESCRIPTION = (
 
 
 def coder_spec(settings: Settings) -> SubagentSpec:
+    """The coder helper: file tools plus run_command, writes and commands need approval."""
     roots = settings.workspace_dirs
     roots[0].mkdir(parents=True, exist_ok=True)
     return SubagentSpec(

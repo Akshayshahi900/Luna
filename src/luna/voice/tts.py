@@ -46,6 +46,7 @@ class PiperTTS:
 
     @property
     def model_path(self) -> Path:
+        """Where the Piper voice model file is (downloaded on first use)."""
         return self.voices_dir / f"{self.voice_name}.onnx"
 
     def _ensure_loaded(self) -> Any:

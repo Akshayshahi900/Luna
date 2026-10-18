@@ -93,6 +93,7 @@ class WhisperSTT:
             return " ".join(s.text.strip() for s in segments).strip()
 
     async def atranscribe(self, samples: np.ndarray, prompt: str | None = WAKE_PROMPT) -> str:
+        """``transcribe`` in a worker thread, so the event loop stays free."""
         return await asyncio.to_thread(self.transcribe, samples, prompt)
 
     async def warm_up(self) -> None:

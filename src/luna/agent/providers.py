@@ -26,6 +26,7 @@ from luna.config import Settings
 
 @dataclass(frozen=True)
 class Provider:
+    """One OpenAI-compatible model host and where its settings live."""
     id: str
     label: str
     key_field: str | None  # Settings field holding the API key; None = no key needed
@@ -33,19 +34,23 @@ class Provider:
     env_key: str  # for error messages
 
     def base_url(self, settings: Settings) -> str:
+        """The provider's OpenAI-compatible API URL."""
         if self.id == "ollama":
             return settings.ollama_base_url.rstrip("/")
         return _HOSTED_URLS[self.id]
 
     def api_key(self, settings: Settings) -> str | None:
+        """The API key from settings (a dummy one for Ollama)."""
         if self.key_field is None:
             return "ollama"  # the OpenAI client insists on some key; Ollama ignores it
         return getattr(settings, self.key_field)
 
     def default_model(self, settings: Settings) -> str:
+        """The model to use when none is chosen."""
         return getattr(settings, self.model_field)
 
     def configured(self, settings: Settings) -> bool:
+        """True when the provider can be used (it has a key)."""
         return bool(self.api_key(settings))
 
 
@@ -65,6 +70,7 @@ PROVIDERS: dict[str, Provider] = {
 
 
 def get_provider(provider_id: str) -> Provider:
+    """The Provider for ``provider_id``; ValueError if unknown."""
     try:
         return PROVIDERS[provider_id]
     except KeyError:

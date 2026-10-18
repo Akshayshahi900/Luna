@@ -1,8 +1,17 @@
 [project]
 name = "luna"
 version = "0.1.0"
-description = "Scalable LangGraph chatbot with memory and MCP tools"
+description = "Voice-first personal assistant on LangGraph with subagents, memory and MCP tools"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["langgraph", "langchain", "agent", "assistant", "mcp", "voice"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 authors = [
     { name = "Akshay shahi", email = "shahiakshay900@gmail.com" }
 ]
@@ -22,6 +31,11 @@ dependencies = [
     "google-api-python-client>=2.201.0",
     "google-auth-oauthlib>=1.5.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Akshayshahi900/Luna"
+Repository = "https://github.com/Akshayshahi900/Luna"
+Issues = "https://github.com/Akshayshahi900/Luna/issues"
 
 [project.scripts]
 luna = "luna:main"

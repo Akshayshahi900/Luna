@@ -27,6 +27,7 @@ TITLE_CHARS = 60
 
 
 def new_session_id() -> str:
+    """A fresh, unique thread id for a new session."""
     return str(uuid.uuid4())
 
 

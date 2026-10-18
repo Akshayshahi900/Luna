@@ -1,9 +1,20 @@
 # Luna
 
+[![CI](https://github.com/Akshayshahi900/Luna/actions/workflows/ci.yml/badge.svg)](https://github.com/Akshayshahi900/Luna/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)
+
 A general assistant on LangGraph: one main agent that does quick work
 itself and hands bigger jobs to helper agents — **researcher** (web),
 **files**, **coder** and **assistant** (to-dos synced with Google Tasks, Gmail and Google Calendar via MCP). Risky
 actions (writing files, running commands, sending things) ask you first.
+
+## Requirements
+
+- Python 3.14 and [uv](https://docs.astral.sh/uv/)
+- An [OpenRouter](https://openrouter.ai/keys) or [Groq](https://console.groq.com/keys)
+  API key, or a local [Ollama](https://ollama.com) model that supports tools
+- Node.js 22+ (only for the web UI)
 
 ## Quick start
 
@@ -67,12 +78,27 @@ It explains, in plain English:
 - which file to open first
 - how to add your own tool
 
-## Configuration
+## Documentation
 
-See `.env.example` and `config/mcp_servers.json`.
+Everything is indexed in [`docs/`](docs/README.md). The most useful pages:
+
+- [`docs/configuration.md`](docs/configuration.md) — every `LUNA_*` setting
+- [`docs/cli.md`](docs/cli.md) — terminal commands, `/memory`, approvals
+- [`docs/agents-and-tools.md`](docs/agents-and-tools.md) — helpers, MCP servers, adding your own tools
+- [`docs/development.md`](docs/development.md) — layout, tests, web dev
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — how the pieces fit, one message end to end
 - [`DECISIONS.md`](DECISIONS.md) — why things are the way they are
 - Specs: [`spec1`](spec/spec1.md) (core agent), [`spec2`](spec/spec2.md)
   (loop limits, when to use subagents), [`spec3`](spec/spec3.md) (helpers,
   task budget, scratchpad, approval), [`spec4`](spec/spec4.md) (web UI)
+
+## Contributing
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Found a security issue? Please follow
+[`SECURITY.md`](SECURITY.md) instead of opening a public issue.
+
+## License
+
+[MIT](LICENSE) © Akshay Shahi

@@ -43,6 +43,7 @@ DESCRIPTION = (
 
 
 def files_spec(settings: Settings) -> SubagentSpec:
+    """The files helper: read, search and (with approval) write in the workspace."""
     roots = settings.workspace_dirs
     roots[0].mkdir(parents=True, exist_ok=True)
     return SubagentSpec(

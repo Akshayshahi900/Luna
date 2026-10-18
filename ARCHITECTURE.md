@@ -139,11 +139,20 @@ tests/                     pytest suite (fake models, no API key)
 web/                       browser UI (Vite + React + React Three Fiber); `npm run build` → web/dist
   src/App.tsx              voice loop, pauses, keyboard; src/lib (socket, reducer, speech),
   src/core (3D core), src/components (HUD, drawer, pause card, memory panel)
+docs/README.md             index of all docs
+docs/configuration.md      every LUNA_* setting, what lives where
+docs/cli.md                luna commands, /memory, approvals
+docs/agents-and-tools.md   main agent, helpers, MCP servers, how to extend
+docs/development.md        setup, layout, tests, web dev, which docs to update
 docs/web-ui.md             running the web UI, WebSocket protocol
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
 docs/google.md             Google sign-in (Gmail, Calendar, Tasks), calendar tools, to-do sync, email → to-do / event
 spec/                      design specs; DECISIONS.md; this file
+.github/                   CI (pytest + web test/build), issue and PR templates
+LICENSE, CONTRIBUTING.md,  MIT licence, contributor guide, code of conduct,
+CODE_OF_CONDUCT.md,        private vulnerability reporting
+SECURITY.md
 ```
 
 ## Not built yet

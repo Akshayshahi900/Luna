@@ -14,3 +14,20 @@ workspace/
 
 # Personal instructions for Luna (see config/persona.example.md)
 config/persona.md
+
+# Secrets / OAuth (normally under data/, listed explicitly to be safe)
+.env.*
+!.env.example
+credentials.json
+token.json
+
+# Node / web build
+node_modules/
+web/dist/
+
+# Editors / tooling
+.idea/
+.vscode/
+*.swp
+.coverage
+htmlcov/

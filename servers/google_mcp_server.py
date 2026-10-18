@@ -121,6 +121,7 @@ def event_times(start: str, end: str, tz: tzinfo) -> tuple[dict[str, str], dict[
 # --- Shapes returned to the model ---------------------------------------------
 
 def event_summary(event: dict[str, Any]) -> dict[str, Any]:
+    """The parts of a Calendar event the model needs, in a compact dict."""
     start, end = event.get("start", {}), event.get("end", {})
     description = event.get("description", "")
     return {

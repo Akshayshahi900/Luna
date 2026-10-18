@@ -129,6 +129,7 @@ def normalize(text: str) -> str:
 
 
 def looks_secret(text: str) -> bool:
+    """True if the text looks like a password, API key or token (never stored)."""
     return any(p.search(text) for p in _SECRET_PATTERNS)
 
 
@@ -171,6 +172,7 @@ class LongTermStore:
             self._conn.commit()
 
     def close(self) -> None:
+        """Close the database connection."""
         with self._lock:
             self._conn.close()
 
@@ -194,6 +196,7 @@ class LongTermStore:
         }
 
     def get(self, memory_id: int) -> dict[str, Any]:
+        """One saved memory by id; MemoryRefused if missing or deleted."""
         with self._lock:
             return self._as_dict(self._row(memory_id))
 
@@ -219,6 +222,7 @@ class LongTermStore:
         return [self._as_dict(r) for r in rows]
 
     def pinned(self) -> list[dict[str, Any]]:
+        """Pinned memories, which are always shown to the model."""
         return [m for m in self.list() if m["pinned"]]
 
     def history(self, memory_id: int) -> list[dict[str, Any]]:
@@ -267,6 +271,7 @@ class LongTermStore:
         return text, kind
 
     def add(self, text: str, kind: str = "fact", pinned: bool = False, source: str = "user") -> dict[str, Any]:
+        """Save a new memory and log it in its history."""
         text, kind = self._clean(text, kind)
         with self._lock:
             now = _now()
@@ -287,6 +292,7 @@ class LongTermStore:
         pinned: bool | None = None,
         source: str = "user",
     ) -> dict[str, Any]:
+        """Change a memory's text, kind or pin (``None`` = keep); logged for undo."""
         with self._lock:
             row = self._row(memory_id)
             new_text, new_kind = self._clean(
@@ -307,6 +313,7 @@ class LongTermStore:
             return self._as_dict(self._row(memory_id))
 
     def delete(self, memory_id: int, source: str = "user") -> None:
+        """Soft-delete a memory; ``undo`` brings it back."""
         with self._lock:
             row = self._row(memory_id)
             self._conn.execute("UPDATE memories SET deleted_at = ? WHERE id = ?", (_now(), memory_id))
@@ -369,6 +376,7 @@ class LongTermStore:
             return [self._suggestion_dict(r) for r in rows]
 
     def pending_count(self) -> int:
+        """How many suggestions are waiting for the user."""
         with self._lock:
             return self._conn.execute("SELECT COUNT(*) FROM suggestions WHERE status = 'pending'").fetchone()[0]
 
@@ -457,6 +465,7 @@ class LongTermStore:
         return result
 
     def reject(self, suggestion_id: int) -> None:
+        """Decline a pending suggestion so it is not suggested again."""
         self._pending(suggestion_id)
         self._set_status(suggestion_id, "rejected")
 

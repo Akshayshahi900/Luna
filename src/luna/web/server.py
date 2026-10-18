@@ -139,9 +139,11 @@ class AgentHost:
 
     @property
     def can_switch(self) -> bool:
+        """True when the agent can be rebuilt with another model."""
         return self._rebuild is not None
 
     def info(self) -> dict:
+        """The current provider and model, as a ``model`` message for the browser."""
         return {"type": "model", "provider": self.provider, "model": self.model}
 
     async def switch(self, provider: str, model: str = "") -> None:
@@ -213,6 +215,7 @@ class Session:
 
     @property
     def busy(self) -> bool:
+        """True while a run is in progress on this connection."""
         return self.task is not None and not self.task.done()
 
     def _start(self, payload: Any) -> None:
@@ -220,6 +223,7 @@ class Session:
 
     @property
     def agent(self) -> Any:
+        """The current agent (it changes when the model is switched)."""
         return self.host.agent
 
     @property
@@ -464,6 +468,7 @@ def _hello(host: AgentHost, settings: Settings) -> dict:
 
 
 async def luna_socket(ws: WebSocket) -> None:
+    """The /ws endpoint: check the origin, then relay messages to a Session."""
     host: AgentHost = ws.app.state.host
     settings: Settings = ws.app.state.settings
     if not origin_allowed(ws.headers.get("origin"), ws.headers.get("host"), settings.web_allowed_origins):
@@ -501,6 +506,7 @@ async def luna_socket(ws: WebSocket) -> None:
 
 
 async def health(request: Request) -> JSONResponse:
+    """GET /api/health: liveness plus the current provider and model."""
     host: AgentHost = request.app.state.host
     return JSONResponse({"status": "ok", "provider": host.provider, "model": host.model})
 
@@ -548,6 +554,7 @@ async def stt(request: Request) -> Response:
 
 
 async def no_build(request: Request) -> HTMLResponse:
+    """Placeholder page shown when web/dist has not been built."""
     return HTMLResponse(_NO_BUILD_PAGE)
 
 
@@ -620,6 +627,7 @@ def create_app(
 
 
 def main() -> None:
+    """Entry point for ``luna-web``: serve the app with uvicorn."""
     import uvicorn
 
     settings = get_settings()

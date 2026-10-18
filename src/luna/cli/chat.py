@@ -1,3 +1,13 @@
+"""
+Luna in the terminal (`uv run luna`).
+
+A REPL around one agent: each line is sent with run_task, streamed text
+is printed as it arrives, and pauses (tool approvals, ask_user) are
+answered with answer_interrupt. Lines starting with "/" are commands:
+sessions (session_command), long-term memory (memory_command), /tools,
+/help. Command reference: docs/cli.md.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -480,6 +490,7 @@ async def run_chat(resume: str | None = None) -> None:
 
 
 def main() -> None:
+    """Entry point for ``luna``: parse ``--resume`` and start the chat loop."""
     parser = argparse.ArgumentParser(prog="luna", description="Luna in the terminal. Starts a new session.")
     parser.add_argument(
         "--resume", "-r", nargs="?", const="", default=None, metavar="SESSION",
