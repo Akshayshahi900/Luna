@@ -111,7 +111,7 @@ result = await agent.ainvoke(
 ```
 
 **Why `thread_id`?**  
-Memory is stored per thread. Same thread → Luna remembers. `/new` makes a new UUID so history starts fresh.
+Memory is stored per thread (a "session"). Same thread → Luna remembers. Every start makes a new UUID so history starts fresh; `/sessions` + `/resume <n>` (or `luna --resume`) continue an old one.
 
 **Why `async`?**  
 Calling the model and tools takes time. `await` means “wait for that work to finish.”

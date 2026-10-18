@@ -18,8 +18,14 @@ cp .env.example .env
 # 3. Optional: web research — add LUNA_TAVILY_API_KEY (https://app.tavily.com)
 
 # 4. Chat
-uv run luna
+uv run luna              # always a new session
+uv run luna --resume     # continue the most recent one (or --resume <n|id>)
 ```
+
+Every start (and every web tab or reload) opens a **new session**. In the
+CLI, `/sessions` lists saved ones, `/resume <n>` continues one and
+`/delete <n>` removes it. In the web UI, open the transcript (**T**) and
+click `SESSION · … ▾`.
 
 ### Web UI (voice-first)
 

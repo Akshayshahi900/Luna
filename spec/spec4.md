@@ -44,10 +44,11 @@ formats the CLI produces, so the agent can't tell the two apart.
 
 ## 3. Server rules
 
-- One `Session` per socket; it starts on `LUNA_DEFAULT_THREAD_ID`.
-- On connect and on thread switch, the session sends recent history (≤ 40
-  messages with text) and any pause still open in the checkpoint. A page
-  reload therefore doesn't lose an approval.
+- One `Session` per socket; it starts a **new** session (uuid thread) every
+  time, so a reload or a new tab is a fresh conversation (§4f).
+- On a session switch, the server sends recent history (≤ 40 messages with
+  text) and any pause still open in the checkpoint. A pause left behind by
+  a reload is therefore not lost: resume that session to answer it.
 - A `message` while a pause is open is refused: running new input would
   leave the paused tool call without a result.
 - `resume` must answer every open pause; invalid replies (wrong decision
@@ -206,11 +207,39 @@ Visual style unchanged; the transcript drawer and approval card are untouched.
   `web/src/lib/state.test.ts` (nesting, fallback parent, INTERRUPTED,
   context).
 
+## 4f. Sessions: always new, resume on purpose (added 2026-10-18)
+
+- CLI and web both start a new session every time. `LUNA_DEFAULT_THREAD_ID`
+  is gone.
+- `agent/sessions.py` builds the list from the checkpoints. There is no
+  separate table that could disagree with them. Each session has:
+  - id
+  - title (first user message, ≤ 60 chars)
+  - `updated_at` (newest main-graph checkpoint)
+  - `turns`
+
+  A thread with nothing said has no checkpoint, so it never shows up.
+- CLI:
+  - `luna --resume [n|id]` resumes; no value means the most recent.
+  - `/sessions`, `/resume <n|id>`, `/delete <n|id>` (asks y/N), `/session`, `/new`.
+  - Resuming prints the last 4 messages, then asks any pause the session
+    was left at before taking new input.
+- Web: socket `sessions` / `thread` / `delete_session`. The transcript
+  header shows `SESSION · <title> ▾`, and its list resumes on click and
+  deletes on a second click. Deleting the open session moves the tab to
+  a new one.
+- Tests:
+  - `tests/test_memory.py`: list, titles, resolve, delete
+  - `tests/test_cli.py`: commands, and a paused session resumed
+  - `tests/test_web.py`: list, resume after reload, delete
+  - `web/src/lib/state.test.ts` and `time.test.ts`
+- Decision: D30.
+
 ## 5. Verification
 
 - `tests/test_web.py`: translator, pause description/answers, origin check,
   and the socket end to end with fake models (reply, question pause,
-  approval reject, reconnect while paused, threads, bad input, foreign origin,
+  approval reject, reconnect while paused (resume the old session), sessions, bad input, foreign origin,
   model switch seen by every tab, switch errors, model listing).
 - `tests/test_web.py` also covers `/api/stt` (transcribe, bad audio,
   wrong rate/channels/length, foreign origin, off), cancel (running task

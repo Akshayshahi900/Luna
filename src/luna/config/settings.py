@@ -268,12 +268,6 @@ class Settings(BaseSettings):
             for p in value
         ]
 
-    # --- Chat ---
-    default_thread_id: str = Field(
-        default="default",
-        description="Conversation id used when you first start the CLI",
-    )
-
     # --- Web UI (luna-web) ---
     web_host: str = Field(
         default="127.0.0.1",

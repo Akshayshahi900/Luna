@@ -164,3 +164,11 @@ describe("long-term memory", () => {
     expect(s.memoryHistory).toBeUndefined();
   });
 });
+
+describe("sessions", () => {
+  it("stores the saved session list", () => {
+    const item = { id: "s1", title: "plan my trip", updated_at: "2026-10-18T12:00:00+00:00", turns: 2 };
+    const s = run([{ type: "sessions", items: [item] }]);
+    expect(s.sessions).toEqual([item]);
+  });
+});

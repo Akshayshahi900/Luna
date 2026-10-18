@@ -1,6 +1,14 @@
 // Pure reducer for everything the server tells us. No DOM, no sockets:
 // that keeps it unit-testable (state.test.ts).
-import type { Memory, MemoryHistoryEntry, MemorySuggestion, Pause, ProviderInfo, ServerEvent } from "./protocol";
+import type {
+  Memory,
+  MemoryHistoryEntry,
+  MemorySuggestion,
+  Pause,
+  ProviderInfo,
+  ServerEvent,
+  SessionInfo,
+} from "./protocol";
 
 export interface ChatMessage {
   id: string;
@@ -42,8 +50,10 @@ export interface LunaState {
   switching: boolean;
   tools: string[];
   helpers: string[];
+  /** the open session (every tab / reload starts a new one) */
   threadId?: string;
-  threads: string[];
+  /** saved sessions, most recent first (fetched when the list is opened) */
+  sessions: SessionInfo[];
   messages: ChatMessage[];
   activity: Activity[];
   pauses: Pause[];
@@ -89,7 +99,7 @@ export const initialState: LunaState = {
   switching: false,
   tools: [],
   helpers: [],
-  threads: [],
+  sessions: [],
   messages: [],
   activity: [],
   pauses: [],
@@ -161,8 +171,8 @@ function onServer(state: LunaState, event: ServerEvent): LunaState {
         messages: event.history.map((m) => ({ id: nextId("h"), role: m.role, text: m.text })),
       };
 
-    case "threads":
-      return { ...state, threads: event.ids };
+    case "sessions":
+      return { ...state, sessions: event.items };
 
     case "state":
       return { ...state, busy: true, error: undefined };

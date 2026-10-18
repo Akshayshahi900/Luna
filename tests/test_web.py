@@ -216,7 +216,7 @@ def test_socket_streams_a_reply(make_fake_model):
     with TestClient(create_app(agent=agent, settings=_settings())) as client:
         ws, session, hello, thread = _connect(client)
         assert hello["type"] == "hello" and "calculator" in hello["tools"]
-        assert thread == {"type": "thread", "id": "default", "history": []}
+        assert thread["type"] == "thread" and thread["history"] == [] and len(thread["id"]) == 36  # a new uuid
 
         session.send_json({"type": "message", "text": "what is 6*7?"})
         events = _receive_until(session, "done", "error")
@@ -300,7 +300,13 @@ def test_socket_pause_survives_a_reconnect(make_fake_model):
         ws.__exit__(None, None, None)
 
         ws, session, _, thread = _connect(client)  # e.g. the page was reloaded
+        assert thread["history"] == []  # a reload opens a new session…
+        session.send_json({"type": "sessions"})
+        (saved,) = session.receive_json()["items"]
+        session.send_json({"type": "thread", "id": saved["id"]})  # …and the old one can be resumed
+        thread = session.receive_json()
         assert thread["history"] == [{"role": "user", "text": "greet me"}]
+        assert session.receive_json()["type"] == "context"
         (again,) = session.receive_json()["pauses"]
         assert again["id"] == p["id"]
         session.send_json({"type": "resume", "answers": {p["id"]: "Ada"}})
@@ -311,7 +317,7 @@ def test_socket_pause_survives_a_reconnect(make_fake_model):
 def test_socket_threads_and_bad_input(make_fake_model):
     agent = create_agent(model=make_fake_model("hi"), tools=[], checkpointer=InMemorySaver())
     with TestClient(create_app(agent=agent, settings=_settings())) as client:
-        ws, session, *_ = _connect(client)
+        ws, session, _, thread = _connect(client)
         session.send_text("not json")
         assert session.receive_json()["type"] == "error"
         session.send_json({"type": "resume", "answers": {}})
@@ -321,7 +327,7 @@ def test_socket_threads_and_bad_input(make_fake_model):
 
         session.send_json({"type": "new_thread"})
         new = session.receive_json()
-        assert new["type"] == "thread" and new["id"] != "default" and new["history"] == []
+        assert new["type"] == "thread" and new["id"] != thread["id"] and new["history"] == []
         context = session.receive_json()
         assert context["type"] == "context" and context["used"] == 0 and context["max"] > 0
         session.send_json({"type": "thread", "id": "work"})
@@ -744,7 +750,7 @@ def test_socket_suggestions_from_a_run_reach_the_inbox(make_fake_model):
 
         session.send_json({"type": "memories"})
         (s,) = session.receive_json()["suggestions"]
-        assert s["action"] == "add" and s["thread_id"] == "default"
+        assert s["action"] == "add" and len(s["thread_id"]) == 36
 
         session.send_json({"type": "suggestion_accept", "id": s["id"], "text": "Has a beagle named Bruno"})
         listed = session.receive_json()
@@ -760,4 +766,34 @@ def test_socket_memory_off(make_fake_model):
         assert hello["memory"] is False
         session.send_json({"type": "memories"})
         assert session.receive_json()["type"] == "memory_error"
+        ws.__exit__(None, None, None)
+
+
+def test_socket_lists_resumes_and_deletes_sessions(make_fake_model):
+    agent = create_agent(model=make_fake_model("Hello!", "Bye!"), tools=[], checkpointer=InMemorySaver())
+    with TestClient(create_app(agent=agent, settings=_settings())) as client:
+        ws, session, _, first = _connect(client)
+        session.send_json({"type": "sessions"})
+        assert session.receive_json() == {"type": "sessions", "items": []}  # nothing said yet
+
+        session.send_json({"type": "message", "text": "plan my trip to Goa"})
+        _receive_until(session, "done", "error")
+        session.send_json({"type": "new_thread"})
+        second = session.receive_json()
+        session.receive_json()  # context
+        session.send_json({"type": "message", "text": "what is 2+2"})
+        _receive_until(session, "done", "error")
+
+        session.send_json({"type": "sessions"})
+        items = session.receive_json()["items"]
+        assert [i["title"] for i in items] == ["what is 2+2", "plan my trip to Goa"]  # most recent first
+        assert [i["id"] for i in items] == [second["id"], first["id"]]
+        assert items[0]["turns"] == 1
+
+        # Delete the open session: this tab moves to a new, empty one.
+        session.send_json({"type": "delete_session", "id": second["id"]})
+        moved = session.receive_json()
+        assert moved["type"] == "thread" and moved["id"] not in {first["id"], second["id"]}
+        session.receive_json()  # context
+        assert [i["id"] for i in session.receive_json()["items"]] == [first["id"]]
         ws.__exit__(None, None, None)

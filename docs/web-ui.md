@@ -43,7 +43,8 @@ in the dock for hands-free use.
 | Hush | **Esc** (when no task is running), or say "stop" / "quiet" |
 | Stop the task | **Esc** while a task runs, the STOP button, or say **"Luna, cancel"** / "never mind". Stops the main agent and any helpers and logs INTERRUPTED in NEURAL ACTIVITY. STOP also abandons an open approval/question; Esc does not. |
 | Type instead | **/** or TYPE |
-| Transcript / chat | **T** or LOG (also new thread, switch thread) |
+| Transcript / chat | **T** or LOG |
+| Sessions | every tab and every reload starts a **new session**. In the transcript, click `SESSION · … ▾` for saved sessions (title = first thing you said, last used, message count): click one to resume it, ✕ twice to delete it, + for a new one |
 | Long-term memory | **K** or MEMORY (badge = Luna's suggestions waiting). Inbox: accept / edit / decline. Saved: search, add, edit, pin, delete, history + undo. See `docs/memory.md` |
 | Mute voice + sounds | VOICE |
 | Switch model / provider | **M**, or click `UPLINK · …` (top right) or LINK in SUBSYSTEMS |
@@ -87,7 +88,7 @@ to Luna.
 | "stop", "quiet", "be quiet", "enough" | stop talking |
 | "cancel", "cancel that", "abort", "never mind", "forget it" | cancel the running task or the open approval/question |
 | "switch to Groq" / "use Ollama" / "change the model to OpenRouter" | switch provider (its default model) |
-| "new conversation", "start over", "new chat" | fresh thread |
+| "new conversation", "start over", "new chat" | new session |
 | "show / hide the transcript" | open / close the chat drawer |
 | "go to sleep", "stop listening" | turn hands-free off (Space wakes her) |
 
@@ -207,8 +208,8 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 | `hello` | `provider`, `model`, `providers: [{id, label, configured, default_model}]`, `can_switch`, `tools`, `helpers`, `budget`, `tts` (`"piper"` or `"browser"`), `stt` (`"whisper"` or `"browser"`), `memory` (long-term memory on) | on connect |
 | `model` | `provider`, `model` | the model was switched (sent to every tab) |
 | `models` | `provider`, `models`, `error`? | reply to `models` |
-| `thread` | `id`, `history: [{role: "user"\|"luna", text}]` | on connect and after a thread switch |
-| `threads` | `ids` (newest first) | reply to `threads` |
+| `thread` | `id`, `history: [{role: "user"\|"luna", text}]` | on connect (always a new session, empty history) and after a session switch |
+| `sessions` | `items: [{id, title, updated_at, turns}]` (most recent first) | reply to `sessions` and after `delete_session` |
 | `state` | `value: "thinking"` | a run started |
 | `token` | `text` | main agent reply text, streamed |
 | `tool_call` | `id`, `name`, `args`, `depth`, `parent`? | any agent called a tool (`depth` 0 = main, 1 = helper) |
@@ -257,9 +258,10 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 | `message` | `text` | start a task (fresh task budget). Refused while a task runs or a pause is open. |
 | `cancel` | | stop the running task, or abandon the open pause; every unanswered tool call gets the result "Cancelled by the user." so the thread stays valid. Shell commands are killed. |
 | `resume` | `answers: {pause_id: reply}` | answer **every** open pause; same budget continues |
-| `new_thread` | | switch to a fresh thread (uuid); refused while a task runs |
-| `thread` | `id` | switch to an existing or new thread |
-| `threads` | | list saved threads |
+| `new_thread` | | switch to a new session (uuid); refused while a task runs |
+| `thread` | `id` | resume a saved session: its history and any open pause are sent again |
+| `sessions` | | list saved sessions (only ones where something was said) |
+| `delete_session` | `id` | delete a session's checkpoints (long-term memory is untouched). Deleting the open one moves the tab to a new session (`thread` + `context` first). Refused while a task runs |
 | `models` | `provider` | list that provider's models |
 | `set_model` | `provider`, `model` (empty = provider default) | rebuild the agent with that model; `error` if e.g. the key is missing |
 | `memories` | | list memories and pending suggestions |

@@ -53,3 +53,53 @@ def test_memory_command_edits_inbox_and_undo():
     assert memory_command(store, " rm abc").startswith("Give a number")
     assert memory_command(store, " bogus").startswith("Unknown /memory command")
     assert memory_command(None, " list").startswith("Long-term memory is off")
+
+
+async def test_session_commands_list_resume_delete(make_fake_model, capsys):
+    from luna.cli.chat import session_command
+    from luna.config import Settings
+
+    settings = Settings(openrouter_api_key="test")
+    agent = create_agent(model=make_fake_model("Goa it is", "4"), tools=[], checkpointer=InMemorySaver())
+    await stream_reply(agent, "plan my trip to Goa", "s-old")
+    await stream_reply(agent, "what is 2+2", "s-new")
+    capsys.readouterr()
+
+    current = await session_command(agent, "/new", "", "s-new", settings)
+    assert current not in {"s-old", "s-new"}
+
+    assert await session_command(agent, "/sessions", "", current, settings) == current
+    out = capsys.readouterr().out
+    assert out.index("what is 2+2") < out.index("plan my trip to Goa")  # most recent first
+
+    current = await session_command(agent, "/resume", "2", current, settings)
+    assert current == "s-old"
+    out = capsys.readouterr().out
+    assert "Resumed: plan my trip to Goa" in out and "Luna: Goa it is" in out
+
+    # Delete asks first; deleting the open session starts a new one.
+    assert await session_command(agent, "/delete", "1", current, settings, ask=lambda _: "n") == current
+    current = await session_command(agent, "/delete", "s-old", current, settings, ask=lambda _: "y")
+    assert current != "s-old"
+    await session_command(agent, "/sessions", "", current, settings)
+    out = capsys.readouterr().out
+    assert "Deleted: plan my trip to Goa" in out and "plan my trip" not in out.split("New session:")[-1]
+
+
+async def test_resuming_a_paused_session_answers_the_pause_first(make_fake_model, capsys):
+    from langchain.agents import create_agent as make
+    from conftest import tool_call
+    from luna.cli.chat import session_command
+    from luna.config import Settings
+    from luna.tools.builtin import ask_user
+
+    model = make_fake_model(tool_call("ask_user", question="Which city?"), "Booked Goa")
+    agent = make(model=model, tools=[ask_user], checkpointer=InMemorySaver())
+    await stream_reply(agent, "book a trip", "paused")
+
+    current = await session_command(
+        agent, "/resume", "paused", "other", Settings(openrouter_api_key="test"), ask=lambda _: "Goa"
+    )
+    assert current == "paused"
+    out = capsys.readouterr().out
+    assert "waiting for you" in out and "Which city?" in out and "Luna: Booked Goa" in out

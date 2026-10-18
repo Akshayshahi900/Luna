@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
-import uuid
 from collections.abc import Callable
 from typing import Any
 
@@ -13,6 +13,7 @@ from luna.agent.budget import TaskBudget
 from luna.agent.builder import build_agent, recursion_limit
 from luna.agent.longterm import KINDS, LongTermStore, MemoryRefused, open_longterm_store
 from luna.agent.memory import close_checkpointers
+from luna.agent.sessions import delete_session, list_sessions, new_session_id, resolve_session
 from luna.agent.providers import get_provider
 from luna.agent.runner import run_task
 from luna.config import Settings, get_settings
@@ -22,10 +23,11 @@ HELP_TEXT = """
 Commands:
   /help              Show this help
   /tools             List registered tools
-  /thread            Show current thread id
-  /thread <id>       Switch to an existing (or new) thread
-  /threads           List saved threads
-  /new               Start a new conversation thread (fresh memory key)
+  /sessions          List saved sessions (1 = most recent)
+  /resume <n|id>     Resume a saved session (number from /sessions, or id)
+  /delete <n|id>     Delete a saved session (asks first)
+  /session           Show the current session
+  /new               Start a new session
   /memory            Long-term memory: /memory help for its commands
   /quit  or  /exit   Leave the chat
 """.strip()
@@ -45,6 +47,9 @@ Long-term memory (shared by every thread; only you change it):
   /memory reject <id>        Decline suggestion s<id> (Luna won't suggest it again)
 Kinds: fact, preference, person, project. Ids may be written 12, m12 or s3.
 """.strip()
+
+# How many recent messages to show when a session is resumed.
+RECAP_MESSAGES = 4
 
 # Tool results can be long; only show the start in the CLI.
 _TOOL_RESULT_PREVIEW = 200
@@ -147,6 +152,109 @@ def memory_command(store: LongTermStore | None, rest: str) -> str:
     except MemoryRefused as exc:
         return str(exc)
     return f"Unknown /memory command: {sub}. Try /memory help."
+
+
+def _when(ts: str) -> str:
+    """'2026-10-18T12:35:44.67+00:00' → '2026-10-18 12:35' (UTC)."""
+    return ts.replace("T", " ")[:16]
+
+
+def format_sessions(sessions: list[dict[str, Any]], current: str) -> str:
+    """Numbered session list for /sessions (1 = most recent)."""
+    if not sessions:
+        return "(no saved sessions)"
+    lines = []
+    for n, s in enumerate(sessions, 1):
+        marker = "*" if s["id"] == current else " "
+        turns = f"{s['turns']} msg" if s["turns"] == 1 else f"{s['turns']} msgs"
+        lines.append(f" {marker}{n:>3}. {s['title']}  ({_when(s['updated_at'])}, {turns}, {s['id'][:8]})")
+    return "\n".join(lines)
+
+
+async def answer_open_pauses(
+    agent: Any, thread_id: str, settings: Settings, ask: Callable[[str], str] = input
+) -> None:
+    """A resumed session may have stopped at an approval or question:
+    answer it first, or a new message would leave the tool call unanswered."""
+    if agent.checkpointer is None:
+        return
+    state = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+    interrupts = list(state.interrupts)
+    if not interrupts:
+        return
+    print("This session was waiting for you:")
+    budget = TaskBudget(limit=settings.task_budget)
+    limit = recursion_limit(settings)
+    while interrupts:
+        answers = {i.id: answer_interrupt(i.value, ask) for i in interrupts}
+        interrupts = await stream_reply(agent, Command(resume=answers), thread_id, limit, budget)
+
+
+async def print_recap(agent: Any, thread_id: str, count: int = RECAP_MESSAGES) -> None:
+    """The last few messages of a session, so you know where you left off."""
+    if agent.checkpointer is None:
+        return
+    state = await agent.aget_state({"configurable": {"thread_id": thread_id}})
+    messages = [m for m in state.values.get("messages", []) if m.type in {"human", "ai"} and m.text]
+    if len(messages) > count:
+        print(f"  … {len(messages) - count} earlier message(s)")
+    for m in messages[-count:]:
+        who = "You" if m.type == "human" else "Luna"
+        print(f"  {who}: {_short(m.text, 300)}")
+    print()
+
+
+async def session_command(
+    agent: Any,
+    cmd: str,
+    arg: str,
+    thread_id: str,
+    settings: Settings,
+    ask: Callable[[str], str] = input,
+) -> str:
+    """Run /sessions, /resume, /delete, /session or /new; return the session to use next."""
+    if cmd == "/new":
+        thread_id = new_session_id()
+        print(f"New session: {thread_id}")
+        return thread_id
+    if agent.checkpointer is None:
+        print("Sessions aren't saved (no checkpointer).")
+        return thread_id
+    sessions = await list_sessions(agent.checkpointer)
+    if cmd == "/sessions":
+        print(format_sessions(sessions, thread_id))
+        return thread_id
+    if cmd == "/session":
+        current = next((s for s in sessions if s["id"] == thread_id), None)
+        print(f"{thread_id}  {current['title'] if current else '(new, nothing said yet)'}")
+        return thread_id
+
+    if not sessions:
+        print("(no saved sessions)")
+        return thread_id
+    target = resolve_session(arg, sessions)
+    if target is None:
+        print(f"No session matches {arg!r}. See /sessions." if arg else f"Usage: {cmd} <number or id>")
+        return thread_id
+    title = next(s["title"] for s in sessions if s["id"] == target)
+    if cmd == "/resume":
+        print(f"Resumed: {title}")
+        await print_recap(agent, target)
+        await answer_open_pauses(agent, target, settings, ask)
+        return target
+    # /delete
+    if ask(f"Delete session {title!r}? It can't be undone. [y/N] ").strip().lower() not in {"y", "yes"}:
+        print("Kept.")
+        return thread_id
+    await delete_session(agent.checkpointer, target)
+    print(f"Deleted: {title}")
+    if target == thread_id:
+        thread_id = new_session_id()
+        print(f"New session: {thread_id}")
+    return thread_id
+
+
+SESSION_COMMANDS = {"/sessions", "/resume", "/delete", "/session", "/new"}
 
 
 class _Printer:
@@ -295,15 +403,16 @@ async def run_turn(
         interrupts = await stream_reply(agent, Command(resume=answers), thread_id, limit, budget)
 
 
-async def run_chat(thread_id: str | None = None) -> None:
+async def run_chat(resume: str | None = None) -> None:
+    """The REPL. Starts a new session, or resumes one: ``resume`` is a
+    session number / id, or "" for the most recent (``luna --resume``)."""
     settings = get_settings()
-    thread_id = thread_id or settings.default_thread_id
+    thread_id = new_session_id()
 
     print("Luna — LangGraph chatbot")
     print(
         f"Model: {settings.provider}/{get_provider(settings.provider).default_model(settings)}  |  "
-        f"Memory: {settings.memory_backend}  |  "
-        f"Thread: {thread_id}"
+        f"Memory: {settings.memory_backend}"
     )
     print("Type /help for commands. Building agent...\n")
 
@@ -315,6 +424,10 @@ async def run_chat(thread_id: str | None = None) -> None:
     print(f"Loaded {len(tool_names)} tool(s): {', '.join(tool_names) or '(none)'}\n")
 
     try:
+        if resume is not None:
+            thread_id = await session_command(agent, "/resume", resume or "1", thread_id, settings)
+        else:
+            print("New session. /sessions lists saved ones, /resume <n> continues one.\n")
         while True:
             try:
                 user_input = input("You: ").strip()
@@ -339,29 +452,12 @@ async def run_chat(thread_id: str | None = None) -> None:
                 if cmd == "/tools":
                     print(", ".join(tool_names) or "(none)")
                     continue
-                if cmd == "/thread":
-                    if args:
-                        # Same id = same memory bucket, so old chats resume.
-                        thread_id = args[0]
-                        print(f"Switched to thread: {thread_id}")
-                    else:
-                        print(thread_id)
-                    continue
-                if cmd == "/threads":
-                    threads = await list_threads(agent.checkpointer)
-                    for tid in threads:
-                        marker = "*" if tid == thread_id else " "
-                        print(f" {marker} {tid}")
-                    if not threads:
-                        print("(no saved threads)")
-                    continue
                 if cmd == "/memory":
                     print(memory_command(memory, user_input[len("/memory"):]))
                     continue
-                if cmd == "/new":
-                    # New UUID = new memory bucket. Old chats stay saved under old ids.
-                    thread_id = str(uuid.uuid4())
-                    print(f"New thread: {thread_id}")
+                if cmd in SESSION_COMMANDS:
+                    # A session is a thread id: same id = same conversation.
+                    thread_id = await session_command(agent, cmd, " ".join(args), thread_id, settings)
                     continue
                 print(f"Unknown command: {cmd}. Try /help.")
                 continue
@@ -384,7 +480,13 @@ async def run_chat(thread_id: str | None = None) -> None:
 
 
 def main() -> None:
-    asyncio.run(run_chat())
+    parser = argparse.ArgumentParser(prog="luna", description="Luna in the terminal. Starts a new session.")
+    parser.add_argument(
+        "--resume", "-r", nargs="?", const="", default=None, metavar="SESSION",
+        help="resume a saved session instead: its number in /sessions or its id (default: the most recent)",
+    )
+    args = parser.parse_args()
+    asyncio.run(run_chat(args.resume))
 
 
 if __name__ == "__main__":

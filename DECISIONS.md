@@ -277,3 +277,26 @@ still fill memory with noise), and helpers reading memory (the main agent
 passes facts, as with the persona, D26). Memory socket messages use
 `memory_error` instead of `error`, because `error` ends a run in the browser.
 
+## D30 — Every start is a new session; old sessions are resumed on purpose (2026-10-18, spec4 §4f)
+The CLI and every web socket used to open `LUNA_DEFAULT_THREAD_ID`
+("default"), so every reload or restart landed in one ever-growing
+thread. Now each CLI start and each tab or reload gets a new uuid thread,
+and the setting is removed. Sessions are listed from the checkpoints
+themselves (`agent/sessions.py`): the newest main-graph checkpoint per
+thread gives `updated_at`, and its messages give the title (first user
+message) and turn count. No sessions table means nothing can drift out of
+sync with the real history. Empty threads have no checkpoint, so opening
+and closing Luna leaves no clutter. Resume:
+- CLI: `luna --resume [n|id]`, `/resume`
+- web: the transcript's SESSION list
+
+Delete uses the checkpointer's `adelete_thread` (long-term memory is
+separate, D29). A pause left in an old session is answered when it is
+resumed: the CLI asks right away, and the web sends the pause on switch.
+Ruled out:
+- user-chosen titles: they need storage beside the checkpoints; can be added later
+- "reopen the last session on reload": that was the behaviour the user wanted gone
+
+Cost: listing reads every checkpoint, which is fine for a personal
+assistant's few hundred threads.
+

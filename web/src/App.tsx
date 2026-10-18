@@ -620,14 +620,15 @@ export default function App() {
             open={drawer}
             messages={state.messages}
             threadId={state.threadId}
-            threads={state.threads}
+            sessions={state.sessions}
             busy={state.busy}
             replyId={state.replyId}
             onClose={() => setDrawer(false)}
             onSend={(t) => handleInput(t, false)}
             onNewThread={() => send({ type: "new_thread" })}
             onPickThread={(id) => send({ type: "thread", id })}
-            onListThreads={() => send({ type: "threads" })}
+            onListSessions={() => send({ type: "sessions" })}
+            onDeleteSession={(id) => send({ type: "delete_session", id })}
           />
 
           <div className="hint">

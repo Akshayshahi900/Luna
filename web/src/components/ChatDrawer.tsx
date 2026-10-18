@@ -1,22 +1,28 @@
 // The chat interface: full transcript plus a text box, in a side drawer.
+// The header opens the session list: resume or delete saved conversations
+// (every tab / reload starts a new session).
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import type { SessionInfo } from "../lib/protocol";
 import type { ChatMessage } from "../lib/state";
+import { ago } from "../lib/time";
 import { CloseIcon, PlusIcon, SendIcon } from "./icons";
 
 interface Props {
   open: boolean;
   messages: ChatMessage[];
   threadId?: string;
-  threads: string[];
+  sessions: SessionInfo[];
   busy: boolean;
   replyId?: string;
   onClose: () => void;
   onSend: (text: string) => void;
   onNewThread: () => void;
   onPickThread: (id: string) => void;
-  onListThreads: () => void;
+  onListSessions: () => void;
+  onDeleteSession: (id: string) => void;
 }
+
 
 /** Minimal formatting: paragraphs, `code` and ``` blocks. No HTML injection. */
 function Body({ text }: { text: string }) {
@@ -45,6 +51,11 @@ function Body({ text }: { text: string }) {
 export function ChatDrawer(p: Props) {
   const [text, setText] = useState("");
   const [picker, setPicker] = useState(false);
+  // Delete needs a second click on the same row.
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const saved = p.sessions.find((x) => x.id === p.threadId);
+  const firstSaid = p.messages.find((m) => m.role === "user")?.text;
+  const title = saved?.title ?? (firstSaid ? firstSaid.slice(0, 40) : "NEW SESSION");
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,15 +81,16 @@ export function ChatDrawer(p: Props) {
                 className="thread-btn"
                 onClick={() => {
                   setPicker((v) => !v);
-                  p.onListThreads();
+                  setConfirm(null);
+                  p.onListSessions();
                 }}
-                title="Switch thread"
+                title={`Saved sessions (current: ${p.threadId ?? "—"})`}
               >
-                THREAD · {p.threadId?.slice(0, 18) ?? "—"} ▾
+                SESSION · {title} ▾
               </button>
             </div>
             <div className="drawer-actions">
-              <button className="icon-btn" onClick={p.onNewThread} title="New conversation" disabled={p.busy}>
+              <button className="icon-btn" onClick={p.onNewThread} title="New session" disabled={p.busy}>
                 <PlusIcon />
               </button>
               <button className="icon-btn" onClick={p.onClose} title="Close (Esc)">
@@ -95,18 +107,35 @@ export function ChatDrawer(p: Props) {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
               >
-                {p.threads.length === 0 && <li className="muted">No saved threads</li>}
-                {p.threads.map((id) => (
-                  <li key={id}>
+                {p.sessions.length === 0 && <li className="muted">No saved sessions yet</li>}
+                {p.sessions.map((x) => (
+                  <li key={x.id} className="session-row">
                     <button
-                      className={id === p.threadId ? "current" : ""}
+                      className={`session-pick ${x.id === p.threadId ? "current" : ""}`}
                       disabled={p.busy}
+                      title={x.id}
                       onClick={() => {
-                        p.onPickThread(id);
+                        p.onPickThread(x.id);
                         setPicker(false);
                       }}
                     >
-                      {id}
+                      <span className="session-title">{x.title}</span>
+                      <span className="session-meta">
+                        {ago(x.updated_at)} · {x.turns} msg{x.turns === 1 ? "" : "s"}
+                        {x.id === p.threadId ? " · OPEN" : ""}
+                      </span>
+                    </button>
+                    <button
+                      className={`session-del ${confirm === x.id ? "armed" : ""}`}
+                      disabled={p.busy}
+                      title="Delete this session (click twice)"
+                      onClick={() => {
+                        if (confirm !== x.id) return setConfirm(x.id);
+                        setConfirm(null);
+                        p.onDeleteSession(x.id);
+                      }}
+                    >
+                      {confirm === x.id ? "DELETE?" : <CloseIcon width={14} height={14} />}
                     </button>
                   </li>
                 ))}

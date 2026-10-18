@@ -64,6 +64,17 @@ export interface MemoryHistoryEntry {
   undone: boolean;
 }
 
+/** A saved conversation (src/luna/agent/sessions.py). */
+export interface SessionInfo {
+  id: string;
+  /** the first thing the user said */
+  title: string;
+  /** ISO time of the last change (UTC) */
+  updated_at: string;
+  /** user messages still in the thread */
+  turns: number;
+}
+
 export type ServerEvent =
   | {
       type: "hello";
@@ -85,7 +96,8 @@ export type ServerEvent =
   | { type: "model"; provider: string; model: string }
   | { type: "models"; provider: string; models: string[]; error?: string }
   | { type: "thread"; id: string; history: { role: "user" | "luna"; text: string }[] }
-  | { type: "threads"; ids: string[] }
+  /** saved sessions, most recent first */
+  | { type: "sessions"; items: SessionInfo[] }
   | { type: "state"; value: "thinking" }
   | { type: "token"; text: string }
   // Helper events (depth >= 1) carry `parent`: the ask_* call they run under.
@@ -124,7 +136,9 @@ export type ClientMessage =
   | { type: "resume"; answers: Record<string, PauseReply> }
   | { type: "new_thread" }
   | { type: "thread"; id: string }
-  | { type: "threads" }
+  | { type: "sessions" }
+  /** deleting the open session moves this tab to a new one */
+  | { type: "delete_session"; id: string }
   | { type: "models"; provider: string }
   | { type: "set_model"; provider: string; model: string }
   | { type: "memories" }

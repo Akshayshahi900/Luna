@@ -62,6 +62,10 @@ voice-first web UI (`docs/web-ui.md`).
    state under the thread id; old messages get summarized past 12k tokens
    (the newest ~4k tokens stay word-for-word, so summaries stay rare).
 
+Sessions: a session is a thread id. The CLI and every browser tab start a
+new one each time; old ones are listed from the checkpoints and resumed
+or deleted on request (`agent/sessions.py`).
+
 The web path is the same loop split over socket messages: `message` →
 steps 1–5, the pauses go to the browser as `pause`, and `resume` is step 6.
 Helper events carry `parent` (the `ask_*` call id, passed through the
@@ -75,7 +79,8 @@ Protocol: `docs/web-ui.md`.
 
 ```
 src/luna/
-  cli/chat.py              REPL, printing, pause handling (run_turn, answer_interrupt),
+  cli/chat.py              REPL (luna [--resume]), printing, pause handling (run_turn,
+                           answer_interrupt), /sessions /resume /delete (session_command),
                            /memory (memory_command)
   voice/tts.py             PiperTTS: local text-to-speech for the web UI (/api/tts)
   voice/stt.py             WhisperSTT: local speech-to-text for the web UI (/api/stt)
@@ -94,6 +99,7 @@ src/luna/
     runner.py              run_task: one run with budget + event stream + pending pauses
     budget.py              TaskBudget + TaskBudgetMiddleware
     scratchpad.py          notes state, write_note, ScratchpadMiddleware
+    sessions.py            list / resolve / delete saved sessions (threads), new_session_id
     longterm.py            LongTermStore (SQLite + FTS5, suggestions, history/undo),
                            recall/remember/suggest_* tools, LongTermMemoryMiddleware
     memory.py              checkpointer factory (sqlite / memory)

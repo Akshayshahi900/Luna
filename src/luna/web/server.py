@@ -13,6 +13,11 @@ to a pause arrives later from the browser:
   browser → {"type": "resume", "answers": {pause_id: reply}}   same budget, run_task again
   browser → {"type": "set_model", "provider": ..., "model": ...}  AgentHost rebuilds the agent
 
+Sessions: every socket (a new tab, a reload) starts a NEW session (thread).
+The browser lists saved ones with {"type": "sessions"}, resumes one with
+{"type": "thread", "id"} and deletes one with {"type": "delete_session"}
+(luna/agent/sessions.py).
+
 All tabs share one AgentHost: switching the model switches it for everyone
 (the memory and MCP connections are reused, so threads carry on).
 
@@ -49,7 +54,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import uuid
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -71,7 +75,8 @@ from luna.agent.longterm import LongTermStore, MemoryRefused, open_longterm_stor
 from luna.agent.memory import close_checkpointers, create_checkpointer
 from luna.agent.providers import describe_providers, get_provider, list_models, make_model
 from luna.agent.runner import run_task
-from luna.cli.chat import agent_tool_names, list_threads
+from luna.agent.sessions import delete_session, list_sessions, new_session_id
+from luna.cli.chat import agent_tool_names
 from luna.config import Settings, get_settings
 from luna.config.settings import PROJECT_ROOT
 from luna.voice.stt import create_stt, wav_to_samples
@@ -199,7 +204,8 @@ class Session:
         self.host = host
         self.settings = settings
         self.send = send
-        self.thread_id = settings.default_thread_id
+        # Always a fresh session; old ones are resumed on request.
+        self.thread_id = new_session_id()
         self.pending: dict[str, dict] = {}  # pause id → describe_pause() output
         self.budget: TaskBudget | None = None
         self._translate = EventTranslator()
@@ -260,6 +266,10 @@ class Session:
         """
         limit = self.settings.summary_trigger_tokens or CONTEXT_FALLBACK_TOKENS
         return {"type": "context", "used": count_tokens_approximately(messages), "max": limit}
+
+    async def _send_sessions(self) -> None:
+        items = await list_sessions(self.agent.checkpointer) if self.agent.checkpointer else []
+        self.send({"type": "sessions", "items": items})  # most recent first
 
     def _send_inbox(self) -> None:
         if self.host.memory is not None:
@@ -378,12 +388,23 @@ class Session:
                 return self.send({"type": "error", "message": str(exc)})
             return self._start(Command(resume=answers))
 
-        if kind in {"new_thread", "thread"} and self.busy:
+        if kind in {"new_thread", "thread", "delete_session"} and self.busy:
             return self.send({"type": "error", "message": "Finish or cancel the current task first."})
 
         if kind == "new_thread":
-            self.thread_id = str(uuid.uuid4())
+            self.thread_id = new_session_id()
             return await self.sync()
+
+        if kind == "delete_session":
+            thread_id = str(msg.get("id", "")).strip()
+            if not thread_id or self.agent.checkpointer is None:
+                return self.send({"type": "error", "message": "Session id required."})
+            await delete_session(self.agent.checkpointer, thread_id)
+            if thread_id == self.thread_id:
+                # Deleted the open one: carry on in a fresh session.
+                self.thread_id = new_session_id()
+                await self.sync()
+            return await self._send_sessions()
 
         if kind == "thread":
             thread_id = str(msg.get("id", "")).strip()
@@ -415,9 +436,8 @@ class Session:
         if kind in MEMORY_MESSAGES:
             return self._handle_memory(kind, msg)
 
-        if kind == "threads":
-            threads = await list_threads(self.agent.checkpointer) if self.agent.checkpointer else []
-            return self.send({"type": "threads", "ids": threads[::-1]})  # newest first
+        if kind == "sessions":
+            return await self._send_sessions()
 
         self.send({"type": "error", "message": f"Unknown message type: {kind!r}"})
 
