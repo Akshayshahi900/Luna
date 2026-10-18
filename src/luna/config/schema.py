@@ -63,7 +63,9 @@ GROUPS: list[tuple[str, str, list[str]]] = [
         "google_tasklist_id", "tasks_google_sync",
     ]),
     ("permissions", "Permissions", ["workspace_dirs", "auto_approve"]),
-    ("network", "Web server & network", ["web_host", "web_port", "web_allowed_origins"]),
+    ("network", "Web server & network", [
+        "web_host", "web_port", "web_allowed_origins", "web_open_window", "web_close_with_window", "web_browser",
+    ]),
     ("voice", "Voice", [
         "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale",
         "stt_engine", "stt_model", "stt_models_dir", "stt_threads",
@@ -89,7 +91,7 @@ _LIVE = {f for _, _, fields in GROUPS if _ in {"mail", "google"} for f in fields
 _RESTART = {
     "provider", "model_name", "memory_backend", "checkpoint_path", "enable_longterm_memory",
     "longterm_memory_path", "mcp_config_path", "enable_mcp_tools", "web_host", "web_port",
-    "web_allowed_origins", "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale",
+    "web_allowed_origins", "web_open_window", "web_close_with_window", "web_browser", "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale",
     "stt_engine", "stt_model", "stt_models_dir", "stt_threads", "routines_enabled", "routines_path",
 }
 

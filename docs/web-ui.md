@@ -15,7 +15,9 @@ cd web && npm install && cd ..
 
 # production-style: one server on :8765 serves the page and the agent
 cd web && npm run build && cd ..
-uv run luna-web                     # → http://127.0.0.1:8765
+uv run luna-web                     # opens Luna in its own app window
+uv run luna-web --no-window         # only the server → http://127.0.0.1:8765
+uv run luna-web --install-desktop   # once: add Luna to your applications menu (Linux)
 
 # frontend development (hot reload)
 uv run luna-web                     # terminal 1: agent on :8765
@@ -23,6 +25,24 @@ cd web && npm run dev               # terminal 2: page on http://localhost:5173
 ```
 
 Vite proxies `/ws` and `/api` to `:8765` (override with `LUNA_BACKEND=http://host:port`).
+
+### The app window
+
+`luna-web` opens Luna like a desktop app, as soon as the server is ready.
+It uses Chrome, Chromium, Edge or Brave in app mode, so there are no tabs
+and no address bar, and Luna has its own window and taskbar icon.
+- **Starts by itself:** Luna comes online without the ENGAGE click.
+- **Behaves like an app:** the right-click menu and text selection are
+  off outside text fields and the transcript.
+- **Closing the window quits Luna** (`LUNA_WEB_CLOSE_WITH_WINDOW=false`
+  keeps the server running).
+- **Launcher:** with the menu entry from `--install-desktop`, clicking
+  Luna again while it runs just opens another window.
+- **Its own profile:** the window keeps the size you leave it at and the
+  microphone permission (asked once) in `data/app-window/`.
+- **Other browsers:** pick one with `LUNA_WEB_BROWSER` (a command or a
+  path). Without a Chromium-family browser, Luna opens in your default
+  browser and the server keeps running until Ctrl+C.
 
 The first start downloads, in the background, Luna's voice (Piper
 `en_US-lessac-medium`, ~60 MB, into `data/voices/`) and her ears (Whisper
@@ -195,6 +215,9 @@ is `LUNA_PROVIDER`).
 | `LUNA_WEB_HOST` | `127.0.0.1` | Listen address. Keep it local: the agent can write files and run commands. |
 | `LUNA_WEB_PORT` | `8765` | Port |
 | `LUNA_WEB_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Extra browser origins allowed to open the socket (the server's own origin is always allowed) |
+| `LUNA_WEB_OPEN_WINDOW` | `true` | Open the app window when luna-web starts |
+| `LUNA_WEB_CLOSE_WITH_WINDOW` | `true` | Closing the window stops luna-web |
+| `LUNA_WEB_BROWSER` | — | Browser for the app window; empty = first of Chrome, Chromium, Edge, Brave |
 
 ## Control Center
 
@@ -312,6 +335,7 @@ src/components/          HUD, captions, dock, command line, chat drawer, pause c
 src/components/control/  Control Center: shell (ControlCenter), Overview, Models,
                          Connectors, Accounts, Permissions, Routines, SystemApps,
                          SettingsForm (schema-driven form)
+src/lib/appWindow.ts     app-window mode (?window=app): detection, title, no context menu (tested)
 src/lib/control.ts       Control API client + formatting / sparkline helpers (tested)
 ```
 

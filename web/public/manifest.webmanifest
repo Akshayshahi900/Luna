@@ -1,0 +1,10 @@
+{
+  "name": "Luna",
+  "short_name": "Luna",
+  "description": "Luna, your local voice assistant",
+  "start_url": "/?window=app",
+  "display": "standalone",
+  "background_color": "#02060c",
+  "theme_color": "#02060c",
+  "icons": [{ "src": "/luna.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -111,6 +111,9 @@ See [`web-ui.md`](web-ui.md).
 | `LUNA_WEB_HOST` | `127.0.0.1` | Listen address. Keep it local: the agent can run commands |
 | `LUNA_WEB_PORT` | `8765` | Port |
 | `LUNA_WEB_ALLOWED_ORIGINS` | Vite dev server | Extra origins allowed to open the WebSocket |
+| `LUNA_WEB_OPEN_WINDOW` | `true` | Open Luna in its own app window on start (`--no-window` skips it once) |
+| `LUNA_WEB_CLOSE_WITH_WINDOW` | `true` | Stop luna-web when that window closes |
+| `LUNA_WEB_BROWSER` | first found | Chrome / Chromium / Edge / Brave command or path for the window |
 | `LUNA_STT_ENGINE` | `whisper` | `whisper` (local, wake word) or `browser` |
 | `LUNA_STT_MODEL` | `base.en` | `tiny.en`, `base.en` or `small.en` |
 | `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Whisper model cache |
@@ -140,5 +143,5 @@ change applies at once or after a restart.
 | `.env` | your keys and overrides | no |
 | `config/mcp_servers.json` | MCP servers | yes |
 | `config/persona.md` | personal instructions | no |
-| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models, routines, `dashboard.json` (HUD widget preferences) | no |
+| `data/` | checkpoints, long-term memory, to-dos, Google token, voice models, routines, `dashboard.json` (HUD widget preferences), `app-window/` (the app window's browser profile) | no |
 | `workspace/` | default sandbox for the files / coder helpers | no |

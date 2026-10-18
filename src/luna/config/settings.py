@@ -329,6 +329,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    # App window (luna/web/window.py): luna-web opens the UI like a desktop app.
+    web_open_window: bool = Field(
+        default=True,
+        description="Open Luna in its own app window when luna-web starts (--no-window skips it once)",
+    )
+    web_close_with_window: bool = Field(
+        default=True,
+        description="Stop luna-web when the app window is closed, like quitting an app",
+    )
+    web_browser: str | None = Field(
+        default=None,
+        description=(
+            "Chromium-family browser for the app window (command or path). "
+            "Empty = the first of Chrome, Chromium, Edge, Brave found"
+        ),
+    )
+
     # --- Voice output (web UI) ---
     tts_engine: str = Field(
         default="piper",

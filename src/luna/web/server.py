@@ -755,13 +755,59 @@ def create_app(
     return Starlette(routes=routes, lifespan=lifespan)
 
 
-def main() -> None:
-    """Entry point for ``luna-web``: serve the app with uvicorn."""
+def main(argv: list[str] | None = None) -> None:
+    """Entry point for ``luna-web``: serve the app and open it in its own
+    window (luna/web/window.py). If Luna already runs, just open a window."""
+    import argparse
+    import threading
+
     import uvicorn
 
+    from luna.web import window
+
+    parser = argparse.ArgumentParser(prog="luna-web", description="Luna's web UI and voice assistant.")
+    parser.add_argument("--no-window", action="store_true", help="only run the server; don't open the app window")
+    parser.add_argument(
+        "--install-desktop", action="store_true",
+        help="add Luna to your applications menu (Linux .desktop entry) and exit",
+    )
+    args = parser.parse_args(argv)
+
+    if args.install_desktop:
+        print(f"Added Luna to the applications menu: {window.install_desktop_entry()}")
+        return
+
     settings = get_settings()
-    print(f"LUNA web UI → http://{settings.web_host}:{settings.web_port}")
-    uvicorn.run(create_app(settings=settings), host=settings.web_host, port=settings.web_port)
+    base = window.base_url(settings.web_host, settings.web_port)
+    url = window.app_url(settings.web_host, settings.web_port)
+    open_it = settings.web_open_window and not args.no_window
+    browser = window.find_browser(settings.web_browser) if open_it else None
+
+    if window.server_running(base):
+        # Started from the launcher while already running: act like an app icon.
+        if open_it:
+            window.open_window(url, browser)
+        print(f"Luna is already running → {base}")
+        return
+
+    server = uvicorn.Server(uvicorn.Config(create_app(settings=settings), host=settings.web_host, port=settings.web_port))
+
+    def launch() -> None:
+        if not window.wait_for_server(base):
+            return
+        proc = window.open_window(url, browser)
+        if proc is not None and settings.web_close_with_window:
+
+            def closed() -> None:
+                print("Luna window closed: stopping.")
+                server.should_exit = True
+
+            window.watch_window(proc, closed)
+
+    print(f"LUNA web UI → {base}" + (" (opening the app window when ready)" if open_it else ""))
+    if open_it:
+        threading.Thread(target=launch, name="luna-window", daemon=True).start()
+    server.run()
 
 
 __all__ = ["AgentHost", "Session", "create_app", "main", "origin_allowed"]

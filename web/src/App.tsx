@@ -14,6 +14,10 @@
 // Control Center: #/control[/<app>] (gear button, S key) opens the OS-style
 // settings layer over the HUD; the socket stays connected underneath.
 // Routine results ({"type": "routine_result"}) refresh the HUD widgets.
+//
+// App window (?window=app, opened by luna-web): engages by itself once the
+// server is connected (autoplay is allowed there) and behaves like a desktop
+// app (lib/appWindow.ts).
 import { AnimatePresence } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boot } from "./components/Boot";
@@ -29,6 +33,7 @@ import { ActivityFeed, Frame, SystemPanel, TopBar } from "./components/Hud";
 import { PauseCard } from "./components/PauseCard";
 import { Core } from "./core/Core";
 import { decayLive, live, MicMeter, setLive, sfx, sounds } from "./lib/audio";
+import { installAppBehaviour, isAppWindow, windowTitle } from "./lib/appWindow";
 import { api, type DashboardPrefs, type Insights } from "./lib/control";
 import { isEcho, parseApproval, parseVoiceCommand, parseWake } from "./lib/intent";
 import type { Pause, PauseReply, ServerEvent } from "./lib/protocol";
@@ -36,6 +41,10 @@ import { Listener, SentenceChunker, Speaker } from "./lib/speech";
 import type { Phase } from "./lib/theme";
 import { useLuna } from "./lib/useLuna";
 import { transcribe, VoiceInput } from "./lib/voiceInput";
+
+/** App window: engage on its own after the boot lines have played. */
+const AUTO_ENGAGE_MS = 2600;
+const APP_WINDOW = isAppWindow();
 
 /** How long Luna keeps listening without the wake word after she replies. */
 const FOLLOW_UP_MS = 8000;
@@ -557,6 +566,17 @@ export default function App() {
     return () => removeEventListener("keydown", onKey);
   }, [listener, speaker, voice, send, startListening, stopListening, endOneShot, endFollow, toggleDrawer, toggleMemory, openControl]);
 
+  const engageRef = useRef<() => void>(() => {});
+  useEffect(() => (APP_WINDOW ? installAppBehaviour() : undefined), []);
+  useEffect(() => {
+    document.title = windowTitle(controlApp !== null, state.busy);
+  }, [controlApp, state.busy]);
+  useEffect(() => {
+    if (!APP_WINDOW || booted || !state.connected) return;
+    const t = setTimeout(() => engageRef.current(), AUTO_ENGAGE_MS);
+    return () => clearTimeout(t);
+  }, [booted, state.connected]);
+
   const engage = () => {
     speaker.unlock(); // inside the click: browsers only allow audio after a gesture
     setBooted(true);
@@ -567,6 +587,7 @@ export default function App() {
     const hint = s.stt === "whisper" && flags.current.handsFree ? " Say “Hey Luna” when you need me." : " How can I help?";
     setTimeout(() => say(`Online.${hint}`), 700);
   };
+  engageRef.current = engage;
 
   const phase: Phase = !booted
     ? "boot"

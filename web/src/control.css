@@ -417,3 +417,13 @@ select.cc-input { width: auto; }
 /* .ok / .error on a run row tint the dot only (styles.css colours .ok text green). */
 .cc-last.ok, .cc-last.skipped, .cc-runs li.ok, .cc-runs li.skipped { color: var(--text); }
 .cc-item-main .cc-help { margin: 0; }
+
+/* --- App window (?window=app): feel like a desktop app, not a web page --- */
+.app-window, .app-window body { user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+.app-window input, .app-window textarea, .app-window select, .app-window [contenteditable],
+.app-window .msg-body, .app-window .selectable, .app-window code, .app-window pre { user-select: text; -webkit-user-select: text; }
+.app-window img, .app-window svg { -webkit-user-drag: none; }
+.app-window ::-webkit-scrollbar { width: 8px; height: 8px; }
+.app-window ::-webkit-scrollbar-thumb { background: rgba(34, 216, 255, 0.25); border-radius: 4px; }
+.app-window ::-webkit-scrollbar-thumb:hover { background: rgba(34, 216, 255, 0.45); }
+.app-window ::-webkit-scrollbar-track { background: transparent; }
