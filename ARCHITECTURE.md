@@ -2,11 +2,12 @@
 
 Luna is a general assistant: one main ReAct agent that does quick work
 itself and hands bigger jobs to helper subagents. Design history is in
-`spec/` (spec1 → spec8); decisions and their reasons in `DECISIONS.md`.
+`spec/` (spec1 → spec10); decisions and their reasons in `DECISIONS.md`.
 Two front doors share the same agent code: the terminal CLI and a
 voice-first web UI (`docs/web-ui.md`). The web UI also has a Control
 Center for settings, connectors, permissions, routines and live stats
-(`docs/control-center.md`).
+(`docs/control-center.md`). `luna-web` opens the UI in its own app
+window, like a desktop application (`web/window.py`, D37).
 
 ## Topology
 
@@ -40,6 +41,7 @@ Center for settings, connectors, permissions, routines and live stats
           synced with Google Tasks) · data/google/ (OAuth client + token)
           · data/luna_routines.sqlite (routines, runs, usage counters)
           · data/dashboard.json (HUD widget preferences)
+          · data/app-window/ (the app window's browser profile)
 
  Control Center (luna-web only): browser #/control ── /api/control/* (web/control.py)
    settings ⇄ .env (config/envfile.py + schema.py; validated, rolled back on error)
@@ -108,8 +110,11 @@ src/luna/
     server.py              luna-web: Starlette app, AgentHost (model switch), /ws Session
                            (background runs, cancel + cancel_cleanup, memory panel
                            messages), /api/tts, /api/stt,
-                           origin check, serves web/dist
+                           origin check, serves web/dist; main(): serve + open the app
+                           window (or only open one if Luna already runs)
     events.py              stream events → JSON; pause describe / answer conversion
+    window.py              app window: find a Chromium browser, open --app with its own
+                           profile, stop the server when it closes, .desktop launcher entry
     control.py             /api/control/*: settings, MCP connectors, Google connect, providers,
                            permissions, stats, dashboard prefs, routines, cron check
   config/settings.py       all LUNA_* settings
@@ -176,8 +181,12 @@ docs/control-center.md     Control Center: apps, routines, what applies when, HT
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
 docs/google.md             Google sign-in (Gmail, Calendar, Tasks), calendar tools, to-do sync, email → to-do / event
+site/                      product website (Vite + React): src/content.ts holds all copy,
+                           src/sections/* lay it out, public/screens/ real screenshots
+                           (demo data); deployed to GitHub Pages by .github/workflows/site.yml
 spec/                      design specs; DECISIONS.md; this file
-.github/                   CI (pytest + web test/build), issue and PR templates
+.github/                   CI (pytest + web + site test/build), Pages deploy (site.yml),
+                           issue and PR templates
 LICENSE, CONTRIBUTING.md,  MIT licence, contributor guide, code of conduct,
 CODE_OF_CONDUCT.md,        private vulnerability reporting
 SECURITY.md

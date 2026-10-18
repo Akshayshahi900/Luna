@@ -3,6 +3,7 @@
 [![CI](https://github.com/Akshayshahi900/Luna/actions/workflows/ci.yml/badge.svg)](https://github.com/Akshayshahi900/Luna/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)
+[![Website](https://img.shields.io/badge/website-luna-22d8ff.svg)](https://akshayshahi900.github.io/Luna/)
 
 A general assistant on LangGraph: one main agent that does quick work
 itself and hands bigger jobs to helper agents — **researcher** (web),

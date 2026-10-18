@@ -18,6 +18,7 @@ src/luna/        the Python package (agent, tools, CLI, web server, voice)
 servers/         MCP servers started by config/mcp_servers.json
 config/          MCP config and persona example
 web/             browser UI (Vite + React + React Three Fiber)
+site/            product website (Vite + React), published to GitHub Pages
 tests/           pytest suite
 docs/            user and developer guides (this folder)
 spec/            design specs, one per feature milestone
@@ -57,6 +58,29 @@ The Vite origin is allowed by default (`LUNA_WEB_ALLOWED_ORIGINS`). The
 WebSocket protocol is documented in [`web-ui.md`](web-ui.md); its types
 are in `web/src/lib/protocol.ts` and `src/luna/web/events.py`.
 
+## Website
+
+```bash
+cd site && npm install
+npm run dev                      # http://localhost:5174/Luna/
+npm test && npm run build        # what CI and the Pages deploy run
+```
+
+All text is in `site/src/content.ts`; sections in `site/src/sections/`
+only lay it out. Screenshots in `site/public/screens/` (`hud`, `overview`,
+`routines`, `models`, `permissions`, `mobile` as `.webp`, plus `og.jpg`
+for link previews) are taken from `luna-web` running on **demo data**:
+- a fake model and fake mail / calendar / to-do tools;
+- seeded memories and usage;
+- a temporary `.env`.
+
+Never use your own data. Take them at 1440×900 (mobile at 390×844) and
+keep the file names.
+
+Pushing changes under `site/` to `main` deploys the site
+(`.github/workflows/site.yml`). The first time, set the repo's Settings →
+Pages → Source to "GitHub Actions".
+
 ## Keeping docs in step
 
 | You changed… | Update |
@@ -68,3 +92,4 @@ are in `web/src/lib/protocol.ts` and `src/luna/web/events.py`.
 | a CLI command | `HELP_TEXT` in `cli/chat.py`, [`cli.md`](cli.md) |
 | a tool, helper or MCP server | [`agents-and-tools.md`](agents-and-tools.md) |
 | feature design | the matching `spec/specN.md` |
+| a user-visible feature | `site/src/content.ts` (capabilities, specs, usage, FAQ) and, if it shows, a screenshot |

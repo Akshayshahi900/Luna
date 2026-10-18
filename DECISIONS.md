@@ -441,3 +441,63 @@ Ruled out:
 the browser on the machine that runs luna-web, which is the normal local
 setup. "Sign out" deletes the token. The CLI command stays for headless
 machines. This revises D32's "sign-in is a separate command".
+
+## D37 — luna-web opens Luna in its own app window (2026-10-18, spec9)
+`luna-web` now starts the server and opens the UI like a desktop app. It
+uses a Chromium-family browser (Chrome, Chromium, Edge or Brave; or
+`LUNA_WEB_BROWSER`) in app mode (`--app=…`):
+- no tabs or address bar;
+- its own taskbar entry (`--class=Luna`);
+- a separate profile in `data/app-window/`, which remembers the window
+  size and the microphone permission and never mixes with your browsing.
+
+Behaviour (`web/window.py`):
+- **Autoplay:** audio may play without a click
+  (`--autoplay-policy=no-user-gesture-required`). The page sees
+  `?window=app` and engages by itself, so there's no ENGAGE click. It
+  also drops web-page behaviour: the right-click menu, text selection
+  outside text, and dragging.
+- **Close to quit:** closing the window stops the server
+  (`LUNA_WEB_CLOSE_WITH_WINDOW`). A browser that exits within 4 s only
+  handed the URL to an existing window, and doesn't count as a close.
+- **Already running:** running `luna-web` again just opens a window.
+  `luna-web --install-desktop` writes a freedesktop launcher entry, so
+  Luna starts from the applications menu like any app.
+- **Fallbacks:** `--no-window` / `LUNA_WEB_OPEN_WINDOW=false` only serve.
+  Without a Chromium browser the page opens in the default browser and
+  the server keeps running.
+
+Ruled out:
+- **pywebview / system web views:** WebKitGTK on Linux handles WebGL,
+  `getUserMedia` and AudioWorklet poorly, which the core and the wake word
+  need.
+- **Electron or Tauri:** a second runtime and build toolchain for a
+  window frame.
+- **Auto-granting the microphone** (`--use-fake-ui-for-media-stream`):
+  it would grant it to any page that window opens. Chrome asks once per
+  profile instead.
+
+## D38 — A separate product website in `site/`, published to GitHub Pages (2026-10-18, spec10)
+The project gets a public, product-style site that covers Luna's
+capabilities, a screenshot tour, how it works, specs, install, usage and
+an FAQ. Details:
+- **Separate app:** a Vite + React + TypeScript app in `site/`, apart from
+  `web/`. The app UI is only served while Luna runs, and has different
+  dependencies (3D, audio).
+- **Content in one file:** all copy lives in `site/src/content.ts`, so a
+  feature change means editing one file, and tests check that it's
+  complete (every nav anchor exists, every screenshot file exists).
+- **Same look as the app:** the HUD's tokens and fonts are copied, not
+  imported, so the two apps stay independent.
+- **Real screenshots with demo data:** captured from luna-web with a fake
+  model, fake mail/calendar/to-do tools and seeded memory/usage. No
+  personal data. Stored as WebP (`og.jpg` for link previews).
+- **Deploy:** `.github/workflows/site.yml` builds, tests and deploys on
+  pushes touching `site/` (base path `/Luna/`, `SITE_BASE` to override).
+  `ci.yml` also builds it on PRs.
+
+Ruled out:
+- A docs framework (Docusaurus, VitePress). Heavier, and the docs already
+  live in `docs/` on GitHub.
+- A route inside `web/`. Invisible unless Luna is running.
+- A router or UI library. One page doesn't need them.

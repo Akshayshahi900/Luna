@@ -1,5 +1,7 @@
 # Luna documentation
 
+Website: <https://akshayshahi900.github.io/Luna/> (source in [`site/`](../site/)).
+
 ## Using Luna
 
 - [Command line](cli.md): `luna`, chat commands, `/memory`, approvals
