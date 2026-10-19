@@ -5,6 +5,8 @@
 ![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)
 [![Website](https://img.shields.io/badge/website-luna-22d8ff.svg)](https://akshayshahi900.github.io/Luna/)
 
+![Luna's voice-first web UI: the orb, live mail/calendar/to-do cards and the helper agents panel](site/public/screens/hud.webp)
+
 A general assistant on LangGraph: one main agent that does quick work
 itself and hands bigger jobs to helper agents — **researcher** (web),
 **files**, **coder** and **assistant** (to-dos synced with Google Tasks, Gmail and Google Calendar via MCP). Risky
