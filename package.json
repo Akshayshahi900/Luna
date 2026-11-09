@@ -1,0 +1,24 @@
+{
+  "name": "luna",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Voice-first personal assistant on LangGraph with subagents, memory and MCP tools",
+  "license": "MIT",
+  "author": "Akshay shahi",
+  "homepage": "https://github.com/Akshayshahi900/Luna",
+  "repository": "github:Akshayshahi900/Luna",
+  "type": "module",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=22.18",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "pnpm --filter luna-web build",
+    "luna": "node core/bin/luna.ts",
+    "web": "node core/bin/luna-web.ts",
+    "google-auth": "node core/bin/luna-google-auth.ts",
+    "test": "pnpm --filter luna-core test",
+    "typecheck": "pnpm --filter luna-core typecheck"
+  }
+}

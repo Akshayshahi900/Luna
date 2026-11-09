@@ -170,7 +170,7 @@ export const CAPABILITIES: Capability[] = [
     icon: "terminal",
     title: "Terminal too",
     text: "The same agent in a CLI, with streaming output and the same approvals.",
-    points: ["uv run luna", "/sessions, /resume, /memory", "Helper steps shown indented as they run"],
+    points: ["pnpm luna", "/sessions, /resume, /memory", "Helper steps shown indented as they run"],
   },
 ];
 
@@ -298,7 +298,7 @@ export const SPECS: { group: string; rows: [string, string][] }[] = [
   {
     group: "Voice",
     rows: [
-      ["Speech in", "faster-whisper (tiny.en / base.en / small.en), local CPU"],
+      ["Speech in", "Whisper via whisper.cpp (tiny.en / base.en / small.en), local CPU"],
       ["Speech out", "Piper neural TTS (en_US-lessac-medium by default), local CPU"],
       ["Wake word", "“Hey Luna”, detected in the page while it's open"],
     ],
@@ -315,18 +315,18 @@ export const SPECS: { group: string; rows: [string, string][] }[] = [
   {
     group: "Interfaces",
     rows: [
-      ["Desktop / web", "React 19 + React Three Fiber HUD, served by Starlette over a WebSocket"],
+      ["Desktop / web", "React 19 + React Three Fiber HUD, served by Node (Hono) over a WebSocket"],
       ["App window", "Chrome / Chromium / Edge / Brave app mode, own profile"],
-      ["CLI", "uv run luna"],
+      ["CLI", "pnpm luna"],
       ["Integrations", "Gmail API or IMAP/SMTP, Google Calendar, Google Tasks, Tavily"],
     ],
   },
   {
     group: "Project",
     rows: [
-      ["Language", "Python 3.14 (uv), TypeScript"],
+      ["Language", "TypeScript (Node 22.18+, no build step)"],
       ["License", "MIT"],
-      ["Tests", "pytest + vitest with a fake chat model: no API keys, no LLM quota"],
+      ["Tests", "vitest with a fake chat model: no API keys, no LLM quota"],
     ],
   },
 ];
@@ -348,8 +348,8 @@ export interface InstallStep {
 export const INSTALL: InstallStep[] = [
   {
     title: "Get the code and the tools",
-    text: "You need Python 3.14 with uv, and Node.js 22+ for the interface.",
-    code: "git clone https://github.com/Akshayshahi900/Luna.git\ncd Luna\nuv sync",
+    text: "You need Node.js 22.18 or newer and pnpm. For Luna's voice, also the Piper program (unpack it into data/piper/).",
+    code: "git clone https://github.com/Akshayshahi900/Luna.git\ncd Luna\npnpm install && pnpm build",
   },
   {
     title: "Add a model key",
@@ -357,19 +357,14 @@ export const INSTALL: InstallStep[] = [
     code: "cp .env.example .env\n# edit .env: LUNA_OPENROUTER_API_KEY=sk-or-...",
   },
   {
-    title: "Build the interface",
-    text: "One-time build of the HUD and Control Center.",
-    code: "cd web && npm install && npm run build && cd ..",
-  },
-  {
     title: "Start Luna",
     text: "Luna opens in her own window and comes online. The first start downloads the voice (~60 MB) and speech model (~140 MB).",
-    code: "uv run luna-web",
+    code: "pnpm web",
   },
   {
     title: "Optional extras",
     text: "Add Luna to your app menu, connect Google (Gmail, Calendar, Tasks), or enable web research.",
-    code: "uv run luna-web --install-desktop\nuv run luna-google-auth\n# .env: LUNA_TAVILY_API_KEY=tvly-...",
+    code: "pnpm web --install-desktop\npnpm google-auth\n# .env: LUNA_TAVILY_API_KEY=tvly-...",
     optional: true,
   },
 ];
@@ -395,8 +390,8 @@ export const VOICE_COMMANDS: [string, string][] = [
 ];
 
 export const CLI: [string, string][] = [
-  ["uv run luna", "Chat in the terminal (new session)"],
-  ["uv run luna --resume", "Continue the last session"],
+  ["pnpm luna", "Chat in the terminal (new session)"],
+  ["pnpm luna --resume", "Continue the last session"],
   ["/sessions · /resume <n>", "List and resume sessions"],
   ["/memory inbox", "Review Luna's memory suggestions"],
   ["/tools", "What the main agent can call"],
@@ -413,7 +408,7 @@ export const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Which operating systems and browsers?",
-    a: "Anything that runs Python 3.14. The app window uses Chrome, Chromium, Edge or Brave. Without one, Luna opens in your default browser. The interface works in any modern browser.",
+    a: "Anything that runs Node.js 22.18 or newer. The app window uses Chrome, Chromium, Edge or Brave. Without one, Luna opens in your default browser. The interface works in any modern browser.",
   },
   {
     q: "Can it work fully offline?",

@@ -7,7 +7,7 @@ name: Website
 on:
   push:
     branches: [main]
-    paths: ["site/**", ".github/workflows/site.yml"]
+    paths: ["site/**", "pnpm-lock.yaml", ".github/workflows/site.yml"]
   workflow_dispatch:
 
 permissions:
@@ -27,14 +27,16 @@ jobs:
         working-directory: site
     steps:
       - uses: actions/checkout@v4
+      # pnpm version from "packageManager" in the root package.json
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: site/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+          cache: pnpm
+      # One workspace (pnpm-workspace.yaml): installs core, web and site
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,6 +1,6 @@
 # Configuration reference
 
-Every setting is a field on `Settings` in `src/luna/config/settings.py`.
+Every setting is a field on `Settings` in `core/src/config/settings.ts`.
 Set it as an environment variable with the `LUNA_` prefix, or put the same
 line in `.env` at the project root (found from any working directory).
 Start from `.env.example`. Restart `luna` / `luna-web` after a change.
@@ -10,7 +10,7 @@ are comma-separated. Relative paths are relative to the project root.
 
 ## Model provider
 
-All three providers speak the OpenAI API (`src/luna/agent/providers.py`).
+All three providers speak the OpenAI API (`core/src/agent/providers.ts`).
 The web UI can switch provider and model live (**M**).
 
 | Variable | Default | What it does |
@@ -54,7 +54,7 @@ Kept low on purpose: every model call is one API request (DECISIONS.md D25).
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `LUNA_MEMORY_BACKEND` | `sqlite` | `sqlite` (saved to disk) or `memory` (lost on exit) |
-| `LUNA_CHECKPOINT_PATH` | `data/luna_memory.sqlite` | Thread checkpoints |
+| `LUNA_CHECKPOINT_PATH` | `data/luna_checkpoints.sqlite` | Thread checkpoints (the Python version's `luna_memory.sqlite` can't be read by the TypeScript backend, D41) |
 | `LUNA_SUMMARY_TRIGGER_TOKENS` | `12000` | Summarize old messages past this size; `0` = never |
 | `LUNA_SUMMARY_KEEP_TOKENS` | `4000` | Recent history kept word-for-word after a summary |
 
@@ -97,7 +97,7 @@ Read by the MCP servers themselves. Details: [`mail.md`](mail.md),
 | `LUNA_MAIL_SMTP_HOST` / `_PORT` | `smtp.gmail.com` / `465` | SMTP server (465 = SSL, else STARTTLS) |
 | `LUNA_MAIL_MAX_BODY_CHARS` | `4000` | Longer bodies are cut before the model sees them |
 | `LUNA_GOOGLE_CREDENTIALS_PATH` | `data/google/credentials.json` | OAuth "Desktop app" client file |
-| `LUNA_GOOGLE_TOKEN_PATH` | `data/google/token.json` | Saved sign-in (`uv run luna-google-auth`) |
+| `LUNA_GOOGLE_TOKEN_PATH` | `data/google/token.json` | Saved sign-in (`pnpm google-auth`) |
 | `LUNA_GOOGLE_CALENDAR_ID` | `primary` | Calendar the assistant uses |
 | `LUNA_GOOGLE_TASKLIST_ID` | `@default` | Google Tasks list synced with the local to-dos |
 | `LUNA_TASKS_GOOGLE_SYNC` | `true` | Two-way to-do sync when signed in |
@@ -116,12 +116,13 @@ See [`web-ui.md`](web-ui.md).
 | `LUNA_WEB_BROWSER` | first found | Chrome / Chromium / Edge / Brave command or path for the window |
 | `LUNA_STT_ENGINE` | `whisper` | `whisper` (local, wake word) or `browser` |
 | `LUNA_STT_MODEL` | `base.en` | `tiny.en`, `base.en` or `small.en` |
-| `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Whisper model cache |
+| `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Whisper model cache (`ggml-<model>.bin`, downloaded once) |
 | `LUNA_STT_THREADS` | `4` | CPU threads for Whisper |
 | `LUNA_TTS_ENGINE` | `piper` | `piper` (local voice) or `browser` |
 | `LUNA_TTS_VOICE` | `en_US-lessac-medium` | Piper voice name |
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Piper voice cache |
 | `LUNA_TTS_LENGTH_SCALE` | `0.95` | Speaking pace: < 1 faster, > 1 slower |
+| `LUNA_TTS_PIPER_COMMAND` | *(empty)* | The Piper program; empty = `data/piper/piper`, then `piper` on PATH ([`web-ui.md`](web-ui.md#voice-setup)) |
 
 ## Routines
 

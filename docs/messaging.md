@@ -6,7 +6,7 @@ risky actions with a tap. The bot runs inside `luna-web`, on the same
 agent, memory and tools, so your computer has to be on with Luna running.
 
 Design: [`spec/spec11.md`](../spec/spec11.md) · decision D39 in
-[`DECISIONS.md`](../DECISIONS.md) · code in `src/luna/channels/`.
+[`DECISIONS.md`](../DECISIONS.md) · code in `core/src/channels/`.
 
 ## Set up (5 minutes)
 
@@ -20,7 +20,7 @@ Design: [`spec/spec11.md`](../spec/spec11.md) · decision D39 in
 
 3. Restart `luna-web` (the token is read at startup). To keep it running
    without a window, for example on a home server, use
-   `uv run luna-web --no-window`.
+   `pnpm web --no-window`.
 4. Send your bot any message. It replies with **your Telegram user id**.
    Add the id to the allow-list. This one applies straight away, no
    restart needed:
@@ -116,7 +116,8 @@ to 5 minutes long.
 | No reply at all | Is `luna-web` running? Is the token right? The terminal prints `Telegram: …` errors |
 | "Sorry, I only work for my owner" | Add the id it shows to `LUNA_TELEGRAM_ALLOWED_USERS` |
 | "voice notes need Whisper" | Set `LUNA_STT_ENGINE=whisper` and restart |
-| No voice replies | Needs Piper (`LUNA_TTS_ENGINE=piper`) and `LUNA_TELEGRAM_VOICE_REPLIES=true` |
+| "ffmpeg is needed for voice notes" | Install `ffmpeg` (voice notes are OGG/Opus; it decodes them and encodes Luna's voice replies) |
+| No voice replies | Needs Piper (`LUNA_TTS_ENGINE=piper`, the program installed: [`web-ui.md`](web-ui.md#voice-setup)), `ffmpeg`, and `LUNA_TELEGRAM_VOICE_REPLIES=true` |
 | Error after sending a photo | Your model can't read images: set `LUNA_MODEL_VISION=false` |
 | Two Luna instances, one token | Telegram serves updates to one poller only. Run one `luna-web` per bot |
 
@@ -127,4 +128,4 @@ Meta business account, a verified phone number and a **public HTTPS
 webhook**, so it doesn't fit a local-first assistant without a tunnel.
 The unofficial WhatsApp Web libraries break WhatsApp's terms of service
 and can get the number banned. The channel code is laid out so a
-WhatsApp bridge can be added next to `telegram.py` later (see spec11 §6).
+WhatsApp bridge can be added next to `telegram.ts` later (see spec11 §6).

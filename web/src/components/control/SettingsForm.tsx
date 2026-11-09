@@ -1,5 +1,5 @@
 // A form for any list of settings, built from the server's schema
-// (src/luna/config/schema.py): enum → select, bool → switch, number → number,
+// (core/src/config/schema.ts): enum → select, bool → switch, number → number,
 // list → comma text, secret → write-only password box. Save writes .env.
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { api, fieldText, parseField, type Applies, type SaveResult, type SettingField } from "../../lib/control";

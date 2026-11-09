@@ -226,7 +226,7 @@ export function ControlCenter(p: Props) {
             {restart.length > 0 && (
               <div className="cc-banner">
                 Restart luna-web to apply: {restart.join(", ")}.
-                <small> (Ctrl+C in its terminal, then <code>uv run luna-web</code>)</small>
+                <small> (Ctrl+C in its terminal, then <code>pnpm web</code>)</small>
               </div>
             )}
             {error && <div className="cc-banner bad">Can't reach the Control API: {error}</div>}

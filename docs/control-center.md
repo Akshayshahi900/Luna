@@ -125,8 +125,8 @@ WebSocket events for the Control Center are listed in
 
 ## Files
 
-- **Backend:** `src/luna/web/control.py` (routes), `src/luna/config/envfile.py` and
-  `schema.py` (writing `.env`), `src/luna/routines/` (cron, store, built-ins,
+- **Backend:** `core/src/web/control.ts` (routes), `core/src/config/envfile.ts` and
+  `schema.ts` (writing `.env`), `core/src/routines/` (cron, store, built-ins,
   agent runner, scheduler).
 - **Frontend:** `web/src/components/control/` (shell and apps),
   `web/src/components/InsightWidgets.tsx`, `web/src/lib/control.ts` (client and

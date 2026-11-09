@@ -1,4 +1,4 @@
-// Messages on the /ws socket. Mirrors src/luna/web/server.py + events.py;
+// Messages on the /ws socket. Mirrors core/src/web/session.ts + events.ts;
 // the full protocol is documented in docs/web-ui.md.
 import type { DashboardPrefs, RoutineRun } from "./control";
 
@@ -22,7 +22,7 @@ export interface ProviderInfo {
   default_model: string;
 }
 
-/** One long-term memory (src/luna/agent/longterm.py). Only the user changes these. */
+/** One long-term memory (core/src/agent/longterm.ts). Only the user changes these. */
 export interface Memory {
   id: number;
   text: string;
@@ -65,7 +65,7 @@ export interface MemoryHistoryEntry {
   undone: boolean;
 }
 
-/** A saved conversation (src/luna/agent/sessions.py). */
+/** A saved conversation (core/src/agent/sessions.ts). */
 export interface SessionInfo {
   id: string;
   /** the first thing the user said */
@@ -122,7 +122,7 @@ export type ServerEvent =
   | { type: "memory_inbox"; count: number }
   | { type: "memory_history"; id: number; entries: MemoryHistoryEntry[] }
   | { type: "memory_error"; message: string }
-  // Control Center (src/luna/web/control.py, src/luna/routines/).
+  // Control Center (core/src/web/control.ts, core/src/routines/).
   /** a routine finished (HUD widgets refresh from it) */
   | {
       type: "routine_result";
@@ -139,7 +139,7 @@ export type Decision =
   | { type: "reject"; message?: string }
   | { type: "edit"; args: Record<string, unknown> };
 
-/** The browser's reply to one pause (see build_answer in events.py). */
+/** The browser's reply to one pause (see buildAnswer in core/src/web/events.ts). */
 export type PauseReply = { answer: string } | { decisions: Decision[] };
 
 export type ClientMessage =

@@ -1,19 +1,22 @@
 # Command line
 
-Luna installs three commands (`[project.scripts]` in `pyproject.toml`):
+Luna has three commands, run with pnpm from the repo root (`scripts` in the
+root `package.json`; the programs are `core/bin/*.ts`, so `pnpm link --global`
+in `core/` also installs them as `luna`, `luna-web` and `luna-google-auth`).
+pnpm passes any arguments on to the program:
 
 | Command | What it does | Code |
 | --- | --- | --- |
-| `uv run luna` | Chat in the terminal | `src/luna/cli/chat.py` |
-| `uv run luna-web` | Voice-first web UI at <http://127.0.0.1:8765> | `src/luna/web/server.py`, [`web-ui.md`](web-ui.md) |
-| `uv run luna-google-auth` | One-time Google sign-in (Gmail, Calendar, Tasks) | `src/luna/integrations/google.py`, [`google.md`](google.md) |
+| `pnpm luna` | Chat in the terminal | `core/src/cli/chat.ts` |
+| `pnpm web` | Voice-first web UI at <http://127.0.0.1:8765> | `core/src/web/server.ts`, [`web-ui.md`](web-ui.md) |
+| `pnpm google-auth` | One-time Google sign-in (Gmail, Calendar, Tasks) | `core/src/integrations/google.ts`, [`google.md`](google.md) |
 
 ## `luna`
 
 ```bash
-uv run luna                 # new session
-uv run luna --resume        # continue the most recent session
-uv run luna --resume 3      # continue session 3 from /sessions (or pass its id)
+pnpm luna              # new session
+pnpm luna --resume     # continue the most recent session
+pnpm luna --resume 3   # continue session 3 from /sessions (or pass its id)
 ```
 
 Every start opens a **new session** (thread) unless you pass `--resume`

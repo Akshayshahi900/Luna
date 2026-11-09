@@ -9,19 +9,27 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    name: Python tests
+  core:
+    name: Backend (core/)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: core
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      # pnpm version from "packageManager" in the root package.json
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
-          enable-cache: true
-      - name: Install
-        run: uv sync --locked
+          node-version: 22
+          cache: pnpm
+      # One workspace (pnpm-workspace.yaml): installs core, web and site
+      - run: pnpm install --frozen-lockfile
+      # ffmpeg: the Telegram voice-note tests decode and encode real audio.
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pnpm typecheck
       # Tests use a fake chat model: no API keys or network LLM calls.
-      - name: Test
-        run: uv run pytest
+      - run: pnpm test
 
   web:
     name: Web UI
@@ -31,14 +39,16 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+      # pnpm version from "packageManager" in the root package.json
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+          cache: pnpm
+      # One workspace (pnpm-workspace.yaml): installs core, web and site
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
 
   site:
     name: Website
@@ -48,11 +58,13 @@ jobs:
         working-directory: site
     steps:
       - uses: actions/checkout@v4
+      # pnpm version from "packageManager" in the root package.json
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: site/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+          cache: pnpm
+      # One workspace (pnpm-workspace.yaml): installs core, web and site
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build

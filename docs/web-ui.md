@@ -9,20 +9,37 @@ Design and reasons: [`spec/spec4.md`](../spec/spec4.md), `DECISIONS.md` D15–D2
 ## Run it
 
 ```bash
-# once
-uv sync
-cd web && npm install && cd ..
-
+# once: core/ and web/ dependencies, and the built page in web/dist
+pnpm install && pnpm build
 # production-style: one server on :8765 serves the page and the agent
-cd web && npm run build && cd ..
-uv run luna-web                     # opens Luna in its own app window
-uv run luna-web --no-window         # only the server → http://127.0.0.1:8765
-uv run luna-web --install-desktop   # once: add Luna to your applications menu (Linux)
+pnpm web                     # opens Luna in its own app window
+pnpm web --no-window         # only the server → http://127.0.0.1:8765
+pnpm web --install-desktop   # once: add Luna to your applications menu (Linux)
 
 # frontend development (hot reload)
-uv run luna-web                     # terminal 1: agent on :8765
-cd web && npm run dev               # terminal 2: page on http://localhost:5173
+pnpm web --no-window         # terminal 1: agent on :8765
+cd web && pnpm dev           # terminal 2: page on http://localhost:5173
 ```
+
+### Voice setup
+
+Both voice engines run on your machine:
+
+- **Listening (Whisper):** nothing to install. `@fugood/whisper.node`
+  ships whisper.cpp prebuilt for Linux, macOS and Windows. The model
+  (`ggml-base.en.bin`, ~140 MB) downloads once into `data/models/whisper/`
+  the first time. The Python version's faster-whisper files in that folder
+  aren't used any more and can be deleted.
+- **Speaking (Piper):** a separate program. Download a release for your
+  system from <https://github.com/rhasspy/piper/releases> and unpack it so
+  that `data/piper/piper` exists, or put `piper` on your PATH, or set
+  `LUNA_TTS_PIPER_COMMAND` to its full path. The voice (~60 MB) downloads
+  once into `data/voices/`. Luna checks that the program's `--help`
+  mentions `--model`, so a different program that happens to be called
+  `piper` (some Linux systems have a gaming-mouse tool by that name) is
+  never run as the voice.
+- **Telegram voice notes** also need `ffmpeg` (`dnf install ffmpeg`,
+  `apt install ffmpeg`, `brew install ffmpeg`).
 
 Vite proxies `/ws` and `/api` to `:8765` (override with `LUNA_BACKEND=http://host:port`).
 
@@ -123,9 +140,11 @@ The browser records, the server transcribes:
    silence, and keeps 500 ms from before the start so the first syllable
    isn't cut.
 2. Each utterance is resampled to 16 kHz WAV and sent to `POST /api/stt`.
-   The server runs **Whisper** (`faster-whisper`, int8 on CPU) with Silero
-   VAD filtering, prompted with "Hey Luna." so it spells her name right.
-   About 0.3 s for a short command on a laptop CPU.
+   The server runs **Whisper** (whisper.cpp, greedy decoding on CPU),
+   prompted with "Hey Luna." so it spells her name right. The model stays
+   loaded between utterances. (The timings below were measured with the
+   Python version's faster-whisper and haven't been re-measured with
+   whisper.cpp yet.)
 3. The browser decides what to do with the text:
    - starts with the wake phrase ("Hey Luna", "Luna", and the ways
      Whisper mishears it: "Lunar", "Hey-Lunar"…) → a command;
@@ -152,10 +171,12 @@ wake word; WAKE becomes CONVO: listen again after each reply).
 ## Voice and the core
 
 Luna's replies are spoken by **Piper**, a small neural voice that runs
-locally on the CPU (Windows, macOS, Linux; ~0.1–0.4 s per sentence, about
-14× faster than real time). Each sentence is synthesized by `POST /api/tts`
-as soon as it's complete, so the next one is ready while the current one
-plays.
+locally on the CPU (Windows, macOS, Linux). Each sentence is synthesized by
+`POST /api/tts` as soon as it's complete, so the next one is ready while
+the current one plays. The server runs the Piper program once per sentence
+(`--output_file`, text on stdin), which also loads the voice each time;
+keeping one Piper process alive is the next step if that delay shows
+(DECISIONS.md D41).
 
 The browser plays the audio through an `AnalyserNode` and the core
 follows the actual sound, every frame:
@@ -179,7 +200,7 @@ core falls back to an estimate from word timing.
 
 Other voices: `LUNA_TTS_VOICE=en_GB-jenny_dioco-medium`, `en_GB-alba-medium`,
 `en_US-amy-medium`… (list: https://huggingface.co/rhasspy/piper-voices).
-Pace: `LUNA_TTS_LENGTH_SCALE` (< 1 faster). Note: `piper-tts` is GPL-3.0.
+Pace: `LUNA_TTS_LENGTH_SCALE` (< 1 faster). Note: Piper is GPL-3.0.
 
 ## Switching models
 
@@ -213,6 +234,7 @@ is `LUNA_PROVIDER`).
 | `LUNA_TTS_VOICE` | `en_US-lessac-medium` | Piper voice, downloaded once |
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Where voices are kept |
 | `LUNA_TTS_LENGTH_SCALE` | `0.95` | Speaking pace (< 1 faster) |
+| `LUNA_TTS_PIPER_COMMAND` | *(empty)* | The Piper program (empty = `data/piper/piper`, then PATH) |
 | `LUNA_WEB_HOST` | `127.0.0.1` | Listen address. Keep it local: the agent can write files and run commands. |
 | `LUNA_WEB_PORT` | `8765` | Port |
 | `LUNA_WEB_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Extra browser origins allowed to open the socket (the server's own origin is always allowed) |
@@ -230,8 +252,8 @@ Full guide: [`control-center.md`](control-center.md).
 
 ## WebSocket protocol (`/ws`)
 
-JSON messages, one per frame. Server side: `src/luna/web/server.py`
-(`Session`) and `events.py`; browser side: `web/src/lib/protocol.ts`.
+JSON messages, one per frame. Server side: `core/src/web/server.ts`
+(`Session`) and `events.ts`; browser side: `web/src/lib/protocol.ts`.
 
 ### Server → browser
 
@@ -241,7 +263,7 @@ JSON messages, one per frame. Server side: `src/luna/web/server.py`
 | `model` | `provider`, `model` | the model was switched (sent to every tab) |
 | `models` | `provider`, `models`, `error`? | reply to `models` |
 | `thread` | `id`, `history: [{role: "user"\|"luna", text}]` | on connect (always a new session, empty history) and after a session switch |
-| `sessions` | `items: [{id, title, updated_at, turns}]` (most recent first) | reply to `sessions` and after `delete_session` |
+| `sessions` | `items: [{id, title, updated_at, turns}]` (most recent first) | reply to `sessions` and after `deleteSession` |
 | `state` | `value: "thinking"` | a run started |
 | `token` | `text` | main agent reply text, streamed |
 | `tool_call` | `id`, `name`, `args`, `depth`, `parent`? | any agent called a tool (`depth` 0 = main, 1 = helper) |
@@ -271,7 +293,7 @@ A pause is one of:
 `parent` is present on helper events (`depth` ≥ 1): the `id` of the
 `ask_*` call they run under, or `null` if unknown. The delegate tool puts
 its call id in the helper run's metadata (`PARENT_CALL_METADATA` in
-`agent/subagents/base.py`); `EventTranslator` reads it from the helper's
+`agent/subagents/base.ts`); `EventTranslator` reads it from the helper's
 first streamed `messages` event and maps the helper's namespace to it, so
 parallel helpers nest correctly.
 
@@ -297,7 +319,7 @@ same `tool_call` (same `id`). The browser updates the existing entry.
 | `new_thread` | | switch to a new session (uuid); refused while a task runs |
 | `thread` | `id` | resume a saved session: its history and any open pause are sent again |
 | `sessions` | | list saved sessions (only ones where something was said) |
-| `delete_session` | `id` | delete a session's checkpoints (long-term memory is untouched). Deleting the open one moves the tab to a new session (`thread` + `context` first). Refused while a task runs |
+| `deleteSession` | `id` | delete a session's checkpoints (long-term memory is untouched). Deleting the open one moves the tab to a new session (`thread` + `context` first). Refused while a task runs |
 | `models` | `provider` | list that provider's models |
 | `set_model` | `provider`, `model` (empty = provider default) | rebuild the agent with that model; `error` if e.g. the key is missing |
 | `memories` | | list memories and pending suggestions |
@@ -312,7 +334,7 @@ Replies: a question takes `{"answer": "text"}` (or a bare string). An
 approval takes `{"decisions": [d, ...]}`, one per action, or a single one
 for all, where `d` is `{"type": "approve"}`, `{"type": "reject", "message"?: "why"}`
 or `{"type": "edit", "args": {...}}`. These become exactly what the CLI
-sends (`answer_interrupt` in `cli/chat.py`).
+sends (`answerInterrupt` in `cli/chat.ts`).
 
 ## Frontend files (`web/`)
 
@@ -340,7 +362,8 @@ src/lib/appWindow.ts     app-window mode (?window=app): detection, title, no con
 src/lib/control.ts       Control API client + formatting / sparkline helpers (tested)
 ```
 
-Tests: `cd web && npm test` (vitest, pure modules) and `uv run pytest tests/test_web.py`.
+Tests: `cd web && pnpm test` (vitest, pure modules) and `cd core && pnpm exec vitest run test/web.test.ts`
+(the server end to end over a real socket, fake model).
 
 ## Limits / next steps
 

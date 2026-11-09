@@ -1,0 +1,35 @@
+# One pnpm workspace: the backend (core/), the browser UI (web/) and the
+# product website (site/) share one lockfile (pnpm-lock.yaml) and store.
+packages:
+  - core
+  - web
+  - site
+
+# Dependency install scripts pnpm may run (it runs none by default).
+allowBuilds:
+  # Downloads (or builds) its native SQLite binding: needed.
+  better-sqlite3: true
+  # Its postinstall only builds whisper.cpp from source when asked to; the
+  # prebuilt binaries come as optional platform packages, so skip it.
+  '@fugood/whisper.node': false
+
+# Packages newer than pnpm's minimum release age that Luna uses on purpose
+# (added by pnpm when they were installed).
+minimumReleaseAgeExclude:
+  - '@fugood/node-whisper-darwin-arm64@1.2.0-rc.2'
+  - '@fugood/node-whisper-darwin-x64@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-arm64-cuda@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-arm64-snapdragon@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-arm64-vulkan@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-arm64@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-x64-cuda@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-x64-vulkan@1.2.0-rc.2'
+  - '@fugood/node-whisper-linux-x64@1.2.0-rc.2'
+  - '@fugood/node-whisper-wasm@1.2.0-rc.2'
+  - '@fugood/node-whisper-win32-arm64-vulkan@1.2.0-rc.2'
+  - '@fugood/node-whisper-win32-arm64@1.2.0-rc.2'
+  - '@fugood/node-whisper-win32-x64-cuda@1.2.0-rc.2'
+  - '@fugood/node-whisper-win32-x64-vulkan@1.2.0-rc.2'
+  - '@fugood/node-whisper-win32-x64@1.2.0-rc.2'
+  - '@fugood/whisper.node@1.2.0-rc.2'
+  - ws@8.22.2

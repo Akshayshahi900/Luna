@@ -1,4 +1,4 @@
-// Desktop-app behaviour for the window luna-web opens (src/luna/web/window.py):
+// Desktop-app behaviour for the window luna-web opens (core/src/web/window.ts):
 // the page gets ?window=app, may play audio without a click, and should not
 // act like a web page (no right-click menu, no stray text selection, no
 // dragging the UI around).
