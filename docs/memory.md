@@ -6,9 +6,9 @@ Luna has two kinds of memory.
 | --- | --- | --- |
 | What | the conversation, todos, scratchpad notes | facts and preferences about you |
 | Scope | one thread | every thread |
-| Stored in | `data/luna_memory.sqlite` (checkpoints) | `data/luna_longterm.sqlite` |
+| Stored in | `data/luna_checkpoints.sqlite` (checkpoints) | `data/luna_longterm.sqlite` |
 | Who changes it | Luna, as she works | **only you**. Luna can only suggest |
-| Code | `agent/memory.py`, `agent/scratchpad.py` | `agent/longterm.py` |
+| Code | `agent/memory.ts`, `agent/scratchpad.ts` | `agent/longterm.ts` |
 
 The two files are separate, so deleting threads never touches long-term memory.
 

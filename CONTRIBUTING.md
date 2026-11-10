@@ -16,18 +16,17 @@ long way before you change things.
 ## Setup
 
 ```bash
-uv sync                                  # Python 3.14 + dev deps
-cp .env.example .env                     # add your own keys (never commit .env)
-cd web && npm install && cd ..           # only if you touch the web UI
+pnpm install && pnpm build               # all dependencies + the web UI build (Node 22.18+)
+cp .env.example .env   # add your own keys (never commit .env)
 ```
 
 ## Making a change
 
-- **Match the existing style.** Short modules, plain-English docstrings and
-  comments that explain *why*.
-- **Write tests.** Every change needs tests in `tests/` (Python) or next to
-  the module as `*.test.ts` (web). Tests use a fake chat model
-  (`tests/conftest.py`), so they never call a real LLM or need an API key —
+- **Match the existing style.** Short modules, a plain-English "BEGINNER MAP"
+  comment at the top, and comments that explain *why*.
+- **Write tests.** Every change needs tests in `core/test/` (backend) or next
+  to the module as `*.test.ts` (web). Tests use a fake chat model
+  (`core/test/helpers.ts`), so they never call a real LLM or need an API key —
   keep it that way.
 - **Keep the docs in step:**
   - architectural decision → add an entry to `DECISIONS.md`
@@ -41,9 +40,9 @@ cd web && npm install && cd ..           # only if you touch the web UI
 ## Running the checks
 
 ```bash
-uv run pytest            # Python suite
-cd web && npm test       # web UI logic (vitest)
-cd web && npm run build  # type-check + build
+cd core && pnpm typecheck && pnpm test   # backend: tsc + vitest
+cd web && pnpm test                      # web UI logic (vitest)
+cd web && pnpm build                     # type-check + build
 ```
 
 CI runs the same commands on every pull request.

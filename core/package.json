@@ -1,0 +1,52 @@
+{
+  "name": "luna-core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Luna's backend: the agent, web server, Control Center, routines, channels, voice and MCP servers",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "luna": "bin/luna.ts",
+    "luna-web": "bin/luna-web.ts",
+    "luna-google-auth": "bin/luna-google-auth.ts"
+  },
+  "scripts": {
+    "luna": "node bin/luna.ts",
+    "web": "node bin/luna-web.ts",
+    "google-auth": "node bin/luna-google-auth.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.6",
+    "@huggingface/transformers": "4.3.2",
+    "@langchain/core": "^1.3.5",
+    "@langchain/langgraph": "^1.7.2",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.1.0",
+    "@langchain/mcp-adapters": "^2.0.2",
+    "@langchain/openai": "^1.8.2",
+    "@langchain/tavily": "^1.2.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "^13.0.3",
+    "googleapis": "^189.0.0",
+    "hono": "^4.13.17",
+    "imapflow": "^2.11.0",
+    "langchain": "^1.6.3",
+    "mailparser": "^3.14.2",
+    "nodemailer": "^10.4.0",
+    "onnxruntime-node": "1.30.0",
+    "ws": "^8.22.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/mailparser": "^3.9.0",
+    "@types/node": "^22.20.5",
+    "@types/nodemailer": "^8.0.2",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

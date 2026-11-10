@@ -6,17 +6,17 @@ your own tool, MCP server or helper. For the end-to-end message flow see
 
 ## The main agent
 
-Built by `build_agent` → `assemble_agent` in `src/luna/agent/builder.py`
-with LangChain's `create_agent`. It gets:
+Built by `buildAgent` → `assembleAgent` in `core/src/agent/builder.ts`
+with LangChain's `createAgent`. It gets:
 
-- **Built-in tools** (`src/luna/tools/builtin/`): `get_current_time`,
+- **Built-in tools** (`core/src/tools/builtin/`): `get_current_time`,
   `calculator` (safe AST evaluator, no `eval`), `ask_user` (pauses to ask you).
 - **Scratchpad**: `write_note`, notes kept in graph state and shown to the
-  model on every call (`agent/scratchpad.py`).
+  model on every call (`agent/scratchpad.ts`).
 - **Long-term memory**: `recall`, `remember`, `suggest_update`,
   `suggest_forget`. `remember` and the `suggest_*` tools only *suggest*;
-  you accept them (`agent/longterm.py`, [`memory.md`](memory.md)).
-- **To-do planning**: `write_todos` (LangChain `TodoListMiddleware`).
+  you accept them (`agent/longterm.ts`, [`memory.md`](memory.md)).
+- **To-do planning**: `write_todos` (LangChain `todoListMiddleware`).
 - **MCP tools** from servers with no `"agent"` tag (e.g. `demo`).
 - **Delegate tools**: one `ask_<helper>` per enabled helper.
 
@@ -28,7 +28,7 @@ human-in-the-loop approval.
 
 A helper is just a tool, `ask_<name>(task, context)`, that runs a separate
 agent with a fresh conversation and returns only its final answer
-(D4, `agent/subagents/base.py`). Helpers cannot call other helpers (D5).
+(D4, `agent/subagents/base.ts`). Helpers cannot call other helpers (D5).
 
 | Tool | Enabled when | Tools inside | Asks before | Calls / timeout |
 | --- | --- | --- | --- | --- |
@@ -37,9 +37,9 @@ agent with a fresh conversation and returns only its final answer
 | `ask_coder` | always | the file tools, `run_command`, `write_todos` | writes, `run_command` | 10 / 600 s |
 | `ask_assistant` | an MCP server is tagged `assistant` | mail, calendar, to-do MCP tools, `get_current_time` | risky MCP tools | 5 / 180 s |
 
-File and shell tools (`tools/fs.py`, `tools/shell.py`) are sandboxed to
-`LUNA_WORKSPACE_DIRS`. Big tool outputs are trimmed by `cap_output`
-(`tools/limits.py`). Every helper's model calls also count against
+File and shell tools (`tools/fs.ts`, `tools/shell.ts`) are sandboxed to
+`LUNA_WORKSPACE_DIRS`. Big tool outputs are trimmed by `capOutput`
+(`tools/limits.ts`). Every helper's model calls also count against
 `LUNA_TASK_BUDGET`.
 
 ## MCP servers
@@ -49,65 +49,70 @@ File and shell tools (`tools/fs.py`, `tools/shell.py`) are sandboxed to
 ```json
 {
   "mcpServers": {
-    "demo":   { "command": "uv", "args": ["run", "python", "servers/demo_mcp_server.py"] },
-    "google": { "command": "uv", "args": ["run", "python", "servers/google_mcp_server.py"], "agent": "assistant" },
+    "demo":   { "command": "node", "args": ["core/servers/demo.ts"] },
+    "google": { "command": "node", "args": ["core/servers/google.ts"], "agent": "assistant" },
     "langchain_docs": { "url": "https://docs.langchain.com/mcp", "agent": "researcher" }
   }
 }
 ```
 
-- `command` + `args` start a local stdio server; `url` connects to an HTTP one.
+- `command` + `args` start a local stdio server (relative paths are from the
+  repo root; it keeps running until Luna exits); `url` connects to an HTTP one.
+- Tool names are the server's own. Only if two servers of one group export
+  the same name does the second become `<server>_<name>`.
 - `"agent"` gives the server's tools to that helper instead of the main agent.
 - `"disabled": true` keeps the entry but doesn't load it (the web
   Control Center's Connectors app sets it; [`control-center.md`](control-center.md)).
 - A tool whose name contains a changing verb (`send`, `create`, `update`,
   `delete`, `write`, `add`, `set`, `reply`, …) asks for approval
-  automatically (`is_risky_tool_name` in `mcp/loader.py`, D9).
+  automatically (`isRiskyToolName` in `mcp/loader.ts`, D9).
 
 Servers that ship with Luna:
 
 | Server | Tools |
 | --- | --- |
-| `servers/demo_mcp_server.py` | `reverse_text`, `word_count` |
-| `servers/tasks_mcp_server.py` | `list_tasks`, `add_task`, `set_task_done`, `delete_task`, `add_task_from_email` |
-| `servers/mail_mcp_server.py` | `list_inbox`, `search_emails`, `read_email`, `send_email`, `reply_to_email` |
-| `servers/google_mcp_server.py` | `list_events`, `get_agenda`, `create_event`, `update_event`, `delete_event`, `create_event_from_email` |
+| `core/servers/demo.ts` | `reverse_text`, `word_count` |
+| `core/servers/tasks.ts` | `list_tasks`, `add_task`, `set_task_done`, `delete_task`, `add_task_from_email` |
+| `core/servers/mail.ts` | `list_inbox`, `search_emails`, `read_email`, `send_email`, `reply_to_email` |
+| `core/servers/google.ts` | `list_events`, `get_agenda`, `create_event`, `update_event`, `delete_event`, `create_event_from_email` |
 
 ## Extending Luna
 
 ### Add a built-in tool
 
-1. Write a function with `@tool` in `src/luna/tools/builtin/`. The
-   docstring is what the model reads to decide when to call it — make it
-   specific.
-2. Add it to `get_builtin_tools()`.
-3. Add a test in `tests/` (see `tests/test_calculator.py`).
+1. Write a `tool(fn, { name, description, schema })` in
+   `core/src/tools/builtin/` (`tool` from `@langchain/core/tools`, the
+   arguments as a zod schema). The description is what the model reads to
+   decide when to call it — make it specific.
+2. Add it to `getBuiltinTools()`.
+3. Add a test in `core/test/` (see `core/test/calculator.test.ts`).
 4. Restart and check `/tools`.
 
 If the tool changes anything outside Luna, it must go through approval —
-put it in a helper's `interrupt_on` (see below) rather than on the main agent.
+put it in a helper's `interruptOn` (see below) rather than on the main agent.
 
 ### Add an MCP server
 
-1. Write the server (copy `servers/demo_mcp_server.py`, uses `FastMCP`) or
-   pick an existing one.
+1. Write the server (copy `core/servers/demo.ts`: the MCP SDK's
+   `McpServer.registerTool`, results via `servers/common.ts`) or pick an
+   existing one (any language works: it's just a program on stdio).
 2. Add it to `config/mcp_servers.json` (and `config/mcp_servers.example.json`),
    with `"agent": "<helper>"` if it belongs to a helper.
 3. Name changing tools with a risky verb so they ask for approval.
-4. Test the server's functions directly (see `tests/test_tasks_server.py`).
+4. Test the server's functions directly (see `core/test/tasks_server.test.ts`).
 
 Stdio servers don't inherit Luna's process settings; read your own
-`LUNA_*` variables with `Settings()` inside the server.
+`LUNA_*` variables with `loadSettings()` inside the server (it reads `.env`).
 
 ### Add a helper
 
 Only when the work is noisy and multi-step, needs different tools or
 permissions, or can run in parallel (spec2 §2). Otherwise add a tool.
 
-1. Create `src/luna/agent/subagents/<name>.py` with a `<name>_spec(settings)`
-   function returning a `SubagentSpec` (or `None` when its requirements are
-   missing). Copy `files.py` as a template.
-2. Set `interrupt_on=needs_approval([...risky tool names], settings.auto_approve)`.
-3. Add it to the `candidates` list in `get_subagent_specs()`
-   (`subagents/__init__.py`).
-4. Add tests (see `tests/test_files_subagent.py`), and a `DECISIONS.md` entry.
+1. Create `core/src/agent/subagents/<name>.ts` with a `<name>Spec(settings)`
+   function returning a `subagentSpec({...})` (or `null` when its requirements
+   are missing). Copy `files.ts` as a template.
+2. Set `interruptOn: needsApproval([...risky tool names], settings.auto_approve)`.
+3. Add it to the `candidates` list in `getSubagentSpecs()`
+   (`subagents/index.ts`).
+4. Add tests (see `core/test/helpers_subagents.test.ts`), and a `DECISIONS.md` entry.

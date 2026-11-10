@@ -579,3 +579,147 @@ pointer. Now it turns slowly on its own and you can drag it to spin it.
 - **Own small module (`core/orbit.ts`), not drei's OrbitControls:** that
   would move the camera (and so the particle field and bloom framing)
   and add a dependency for ~80 lines of math.
+
+## D41 — The backend moves from Python to TypeScript (`core/`) (2026-11-09, spec12)
+Everything that was Python is now TypeScript in one `core/` package, next to
+`web/` and `site/`: the agent, the web server and Control Center, routines,
+Telegram, voice, the CLI and the four MCP servers. One language and one
+toolchain (Node + npm) for the whole repo; the frontends were TypeScript
+already. The port kept behaviour, so the web UI didn't change.
+- **Node runs the `.ts` files directly** (type stripping, Node ≥ 22.18):
+  no build step and no `dist/`. `tsc --noEmit` only type-checks
+  (`erasableSyntaxOnly`, imports with `.ts` extensions). The MCP servers
+  are started as `node core/servers/<name>.ts`.
+- **Same libraries, JS edition:** `langchain` v1 `createAgent` and its
+  middleware, `@langchain/langgraph` (interrupts, subgraph streaming,
+  `MemorySaver`), `@langchain/langgraph-checkpoint-sqlite`,
+  `@langchain/mcp-adapters`, `@langchain/openai`, `@langchain/tavily`, the
+  official MCP SDK for the servers, and `better-sqlite3`. Decisions D1–D40
+  carry over unchanged.
+- **The browser protocol didn't change.** Hono serves HTTP, the `ws`
+  library the `/ws` socket, with the same JSON. LangChain JS's
+  human-in-the-loop format is camelCase (`actionRequests`, `editedAction`),
+  so `web/events.ts` translates at the edge.
+- **Settings keep their snake_case names** (`model_name` ↔
+  `LUNA_MODEL_NAME`). They double as the Control Center's field names, so a
+  camelCase rename would have meant a translation table for no gain. The
+  settings are one table in `config/settings.ts` (kind, default,
+  description, validator) instead of pydantic.
+- **Data that carries over:** `luna_longterm.sqlite`, `luna_routines.sqlite`
+  (same schemas), `tasks.json`, `dashboard.json`, `telegram.json`,
+  `mcp_servers.json`, `.env` and the Google token (`token.json` keeps
+  google-auth's format, so no new sign-in). **Not carried over: old chat
+  threads.** The Python checkpoints are msgpack blobs that LangGraph JS
+  can't read, so threads now live in a new `data/luna_checkpoints.sqlite`
+  and `data/luna_memory.sqlite` is left alone.
+- **Voice uses native programs, not Python wheels** (superseded by D43,
+  which runs both engines on onnxruntime). STT is whisper.cpp
+  through `@fugood/whisper.node`: prebuilt binaries for every platform,
+  nothing to compile, and the model (`ggml-<name>.bin`, downloaded once)
+  stays loaded. TTS runs the Piper program once per sentence
+  (`--output_file`, text on stdin). It isn't an npm package, so it comes
+  from `data/piper/`, `PATH` or the new `LUNA_TTS_PIPER_COMMAND`. Its
+  `--help` is checked for `--model`, because some Linux systems ship an
+  unrelated `piper` (a gaming-mouse tool). Telegram audio goes through
+  `ffmpeg`.
+- **Two LangChain JS gaps, worked around:**
+  - The run counters of `modelCallLimitMiddleware` and
+    `toolCallLimitMiddleware` don't reset between messages: a run that ends
+    at the limit skips the reset. `resetRunLimitsMiddleware` zeroes them in
+    `beforeAgent`.
+  - Middleware nodes report the whole message list in stream "updates", so
+    the event translator dedupes by message id and is primed with the
+    thread's messages before each run.
+- **MCP tool names aren't prefixed** with the server name (the JS adapter's
+  default). The prompts name tools plainly (`list_inbox`). Only a clash
+  inside one group gets `<server>_<name>`, which the routines'
+  `findTool` already understood.
+- **Tests:** the pytest suite became vitest (`core/test/`, 310 tests) with
+  the same fake chat model. The fakes for Google and mail now have the
+  `googleapis` / imapflow call shapes.
+
+Ruled out:
+- **A long-lived Piper process** (`--json-input`). It would avoid reloading
+  the voice per sentence, but its output protocol is undocumented, so it
+  wasn't adopted untested. It's the next step if sentence latency matters.
+- **ONNX in Node for voice** (transformers.js / onnxruntime-node). Pure npm,
+  but slower on CPU, and Piper also needs an espeak-ng phonemizer.
+- **`smart-whisper`.** Its bundled whisper.cpp doesn't compile with current
+  GCC.
+- **A Python sidecar for voice.** It would keep two runtimes, which is what
+  this move removes.
+- **Compiling to `dist/`.** It needs an extra build step before every run
+  and in CI, and Node no longer needs one.
+- **Migrating old threads.** That would take a Python msgpack reader in
+  JS, for history that summarization trims anyway.
+
+## D42 — pnpm, one workspace for core, web and site (2026-11-09)
+The repo uses pnpm instead of npm. `pnpm-workspace.yaml` lists `core`,
+`web` and `site`, so one `pnpm install` at the root installs all three
+into one content-addressed store with one `pnpm-lock.yaml`, and CI caches
+it once. The per-package `package-lock.json` files are gone.
+- **Root scripts:** `pnpm luna`, `pnpm web`, `pnpm google-auth`,
+  `pnpm build` (web/dist), `pnpm test`, `pnpm typecheck`. pnpm passes
+  arguments straight through (`pnpm luna --resume`), with no `--`. There's
+  no `setup` script, because `pnpm setup` is a built-in command.
+- **Build scripts are allow-listed** (`allowBuilds`): `better-sqlite3`
+  (its native binding) yes, `@fugood/whisper.node` no (its postinstall
+  only builds from source when asked; the prebuilt binaries come as
+  optional packages).
+- **Strict `node_modules`:** each package only sees its declared
+  dependencies. core, web and site already declared everything, so no
+  package changed.
+- `packageManager: "pnpm@11.8.0"` pins the version for corepack and
+  `pnpm/action-setup` in CI.
+
+Ruled out:
+- **Keeping npm.** It meant three lockfiles and three installs.
+- **A pnpm install per package without a workspace.** That keeps three
+  lockfiles and gains nothing.
+
+## D43 — Voice runs on onnxruntime: Whisper and Piper voices in-process (2026-11-10, spec12)
+D41's voice plan failed when it was first run for real, so both engines now
+run on onnxruntime inside Luna:
+- **What failed:**
+  - The prebuilt `@fugood/whisper.node` 1.2.0-rc crashed with SIGILL: it was
+    built for AVX-512, and this i5-12450H only has AVX2.
+  - The stable 1.1.3 has no SIMD at all: 24 s for a 2 s command.
+  - Running the downloaded Piper program wasn't allowed (unreviewed binary),
+    so it could never be tested here. It would also have reloaded the voice
+    for every sentence.
+- **STT:** Whisper as ONNX through `@huggingface/transformers`
+  (`onnx-community/whisper-<model>`, the 8-bit files, ~75 MB for base.en).
+  - onnxruntime ships prebuilt binaries for every platform and picks the
+    CPU's best instructions at runtime.
+  - Measured: ~0.9 s for a 2 s command, with the exact text.
+  - fp32 was no faster and four times larger.
+- **Silence gate:** Whisper invents "you" / "Thank you." for silence. The
+  Python version prevented that with faster-whisper's Silero VAD. Now audio
+  without 60 ms above about -46 dBFS returns "" and never reaches the model,
+  and `[BLANK_AUDIO]`-style notes are stripped.
+- **TTS:** the same Piper voices (`data/voices/*.onnx`) on onnxruntime,
+  loaded once. Phonemes come from the `espeak-ng` program, one clause at a
+  time so the punctuation (pauses) is kept. Ids follow Piper's rule: ^, each
+  phoneme followed by the pad, then $. Audio is peak-normalised like Piper.
+  - Measured: 0.17 s for a 3.9 s sentence.
+  - Whisper transcribes the output word for word, which checks the phoneme
+    pipeline.
+  - `LUNA_TTS_PIPER_COMMAND` is gone; espeak-ng (any package manager) is the
+    only system dependency, next to ffmpeg for Telegram.
+- **No text prompt for Whisper:** transformers.js has no simple prompt
+  option, and the browser already accepts the wake-word spellings
+  ("Lunar"…), so it isn't needed.
+- **Real round-trip test:** `LUNA_VOICE_TESTS=1 pnpm test` speaks a
+  sentence with Piper and checks that Whisper understands it. It's off by
+  default because it needs the models.
+- **The Groq default model changed** to `openai/gpt-oss-120b`: Groq retired
+  `llama-3.3-70b-versatile` (404 "model does not exist"), which broke a
+  default Groq setup.
+
+Ruled out:
+- **Compiling whisper.cpp on install** (build from source): every install
+  would then need cmake and a compiler.
+- **The system whisper.cpp / Piper programs:** an extra install on every
+  platform, and the Piper program couldn't be verified here.
+- **Silero VAD as a model:** a 2-line energy gate does the job for
+  utterances the browser has already cut, and Telegram voice notes.

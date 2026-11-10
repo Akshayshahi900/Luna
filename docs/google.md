@@ -5,11 +5,11 @@ One Google sign-in powers three MCP servers of Luna's **assistant** helper
 
 | Server | Google part | Guide |
 | --- | --- | --- |
-| `mail` (`servers/mail_mcp_server.py`) | Gmail API (`LUNA_MAIL_BACKEND=gmail`, the default) | [`docs/mail.md`](mail.md) |
-| `google` (`servers/google_mcp_server.py`) | Google Calendar | below |
-| `tasks` (`servers/tasks_mcp_server.py`) | local to-dos, two-way synced with Google Tasks | below |
+| `mail` (`core/servers/mail.ts`) | Gmail API (`LUNA_MAIL_BACKEND=gmail`, the default) | [`docs/mail.md`](mail.md) |
+| `google` (`core/servers/google.ts`) | Google Calendar | below |
+| `tasks` (`core/servers/tasks.ts`) | local to-dos, two-way synced with Google Tasks | below |
 
-The sign-in code is `src/luna/integrations/google.py`.
+The sign-in code is `core/src/integrations/google.ts`.
 
 ## Set up (once)
 
@@ -22,7 +22,7 @@ The sign-in code is `src/luna/integrations/google.py`.
 4. Sign in:
 
    ```bash
-   uv run luna-google-auth
+   pnpm google-auth
    ```
 
    A browser opens; allow access. The token is saved to
@@ -47,7 +47,7 @@ Settings (`.env`):
 | `LUNA_TIMEZONE` | computer's zone | Times without an offset are read in this zone |
 
 Before you sign in, all servers still start. Mail and calendar tools answer
-"Google is not connected: run `uv run luna-google-auth`"; the to-dos work
+"Google is not connected: run `pnpm google-auth`"; the to-dos work
 locally and sync once you're signed in.
 
 ## Calendar tools
@@ -96,7 +96,7 @@ you: and add the invoice email as a to-do for Monday
 ```
 
 The two tools read the email themselves through the mail server's
-`fetch_email` (Gmail or IMAP, read-only), so the title defaults to the
+`fetchEmail` (Gmail or IMAP, read-only), so the title defaults to the
 subject and the item links back to the email:
 
 - **event**: the email's `Message-ID` is stored as a private extended
@@ -110,5 +110,5 @@ Emails without a `Message-ID` are linked by `folder:uid`. An event's time
 always comes from the assistant's call (from you or the email); the server
 never guesses it from the text.
 
-Tests: `tests/test_google_server.py`, `tests/test_tasks_server.py`,
-`tests/test_mail_server.py` (fake Google clients, no network).
+Tests: `core/test/google_server.test.ts`, `core/test/tasks_server.test.ts`,
+`core/test/mail_server.test.ts` (fake Google clients, no network).

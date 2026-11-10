@@ -9,7 +9,7 @@ export function Install() {
       title="Up and running in five minutes"
       intro={
         <>
-          You need Python 3.14 with <a href="https://docs.astral.sh/uv/">uv</a>, Node.js 22+, and an OpenRouter or Groq key, or a local{" "}
+          You need <a href="https://nodejs.org">Node.js</a> 22.18 or newer, <a href="https://pnpm.io">pnpm</a>, and an OpenRouter or Groq key, or a local{" "}
           <a href="https://ollama.com">Ollama</a> model that supports tools.
         </>
       }

@@ -1,22 +1,22 @@
 {
   "mcpServers": {
     "demo": {
-      "command": "uv",
-      "args": ["run", "python", "servers/demo_mcp_server.py"]
+      "command": "node",
+      "args": ["core/servers/demo.ts"]
     },
     "tasks": {
-      "command": "uv",
-      "args": ["run", "python", "servers/tasks_mcp_server.py"],
+      "command": "node",
+      "args": ["core/servers/tasks.ts"],
       "agent": "assistant"
     },
     "mail": {
-      "command": "uv",
-      "args": ["run", "python", "servers/mail_mcp_server.py"],
+      "command": "node",
+      "args": ["core/servers/mail.ts"],
       "agent": "assistant"
     },
     "google": {
-      "command": "uv",
-      "args": ["run", "python", "servers/google_mcp_server.py"],
+      "command": "node",
+      "args": ["core/servers/google.ts"],
       "agent": "assistant"
     },
     "langchain_docs": {

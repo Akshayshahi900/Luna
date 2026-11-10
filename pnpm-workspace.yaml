@@ -1,0 +1,21 @@
+# One pnpm workspace: the backend (core/), the browser UI (web/) and the
+# product website (site/) share one lockfile (pnpm-lock.yaml) and store.
+packages:
+  - core
+  - web
+  - site
+
+# Dependency install scripts pnpm may run (it runs none by default).
+allowBuilds:
+  # Downloads (or builds) its native SQLite binding: needed.
+  better-sqlite3: true
+  # The CPU binaries are bundled; its postinstall only fetches optional
+  # CUDA files, which Whisper on the CPU doesn't use.
+  onnxruntime-node: false
+  # Its postinstall only prints a version notice.
+  protobufjs: false
+
+# Packages newer than pnpm's minimum release age that Luna uses on purpose
+# (added by pnpm when they were installed).
+minimumReleaseAgeExclude:
+  - ws@8.22.2

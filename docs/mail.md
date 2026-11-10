@@ -1,7 +1,7 @@
 # Mail (read the inbox, send and reply with your approval)
 
 Luna's **assistant** helper (`ask_assistant`) reads and sends email through
-`servers/mail_mcp_server.py`, an MCP server listed in
+`core/servers/mail.ts`, an MCP server listed in
 `config/mcp_servers.json` with `"agent": "assistant"`. Two backends,
 chosen with `LUNA_MAIL_BACKEND`; the tools are the same for both:
 
@@ -13,13 +13,13 @@ chosen with `LUNA_MAIL_BACKEND`; the tools are the same for both:
 ## Set up: Gmail API (default)
 
 Follow [`docs/google.md`](google.md#set-up-once) (enable the Gmail API, add
-an OAuth Desktop client, run `uv run luna-google-auth`). Nothing else: the
+an OAuth Desktop client, run `pnpm google-auth`). Nothing else: the
 sender address comes from your Gmail profile. Reading uses the
 `gmail.readonly` scope, so it can't mark mail as read; sending uses
 `gmail.send`, and replies stay in their Gmail thread. `folder` is a Gmail
 label (`INBOX`, `SENT`, `SPAM`, `TRASH`, `STARRED`, … or one of yours), and
 search terms may be any language. Not signed in: the tools answer "Google is
-not connected: run `uv run luna-google-auth`".
+not connected: run `pnpm google-auth`".
 
 ## Set up: IMAP / SMTP
 
@@ -100,4 +100,4 @@ To turn an email into a to-do (synced to Google Tasks) or a calendar event, see
 [`docs/google.md`](google.md#from-email-to-to-do-or-event) (`add_task_from_email`,
 `create_event_from_email`).
 
-Tests: `tests/test_mail_server.py` (fake IMAP/SMTP and fake Gmail, no network).
+Tests: `core/test/mail_server.test.ts` (fake IMAP/SMTP and fake Gmail, no network).

@@ -26,7 +26,7 @@ describe("site content", () => {
 
   it("install steps start Luna and have commands", () => {
     expect(INSTALL.filter((s) => !s.optional).every((s) => s.code?.trim())).toBe(true);
-    expect(INSTALL.some((s) => s.code?.includes("uv run luna-web"))).toBe(true);
+    expect(INSTALL.some((s) => s.code?.includes("pnpm web"))).toBe(true);
   });
 
   it("every screenshot exists in public/", () => {

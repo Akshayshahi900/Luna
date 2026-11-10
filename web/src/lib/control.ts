@@ -1,4 +1,4 @@
-// Control Center: typed client for /api/control (src/luna/web/control.py)
+// Control Center: typed client for /api/control (core/src/web/control.ts)
 // plus small pure helpers (formatting, sparklines) that the tests cover.
 
 export type Applies = "live" | "rebuild" | "restart";
