@@ -63,7 +63,7 @@ directly, so there is no build step: edit a file, run it again.
 ```
 Luna/
 ├── README.md                 ← how to run
-├── package.json              ← pnpm luna / web / google-auth / setup
+├── package.json              ← pnpm luna / web / google-auth / build / test
 ├── .env.example              ← copy to .env for settings
 ├── spec/
 │   ├── spec1.md              ← what was built (design notes)

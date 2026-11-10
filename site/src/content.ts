@@ -149,7 +149,7 @@ export const CAPABILITIES: Capability[] = [
   {
     icon: "window",
     title: "Feels like a desktop app",
-    text: "luna-web opens Luna in its own window with its own taskbar icon.",
+    text: "pnpm web opens Luna in its own window with its own taskbar icon.",
     points: [
       "Starts by itself, no browser tabs or address bar",
       "Closing the window quits Luna",
@@ -358,7 +358,7 @@ export const INSTALL: InstallStep[] = [
   },
   {
     title: "Start Luna",
-    text: "Luna opens in her own window and comes online. The first start downloads the voice (~60 MB) and speech model (~140 MB).",
+    text: "Luna opens in her own window and comes online. The first start downloads the voice (~60 MB) and speech model (~75 MB).",
     code: "pnpm web",
   },
   {

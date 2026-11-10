@@ -3,7 +3,7 @@
 Every setting is a field on `Settings` in `core/src/config/settings.ts`.
 Set it as an environment variable with the `LUNA_` prefix, or put the same
 line in `.env` at the project root (found from any working directory).
-Start from `.env.example`. Restart `luna` / `luna-web` after a change.
+Start from `.env.example`. Restart `pnpm luna` / `pnpm web` after a change.
 
 Lists (`LUNA_WORKSPACE_DIRS`, `LUNA_AUTO_APPROVE`, `LUNA_WEB_ALLOWED_ORIGINS`)
 are comma-separated. Relative paths are relative to the project root.

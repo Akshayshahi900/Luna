@@ -225,7 +225,7 @@ export function ControlCenter(p: Props) {
           <main className="cc-window">
             {restart.length > 0 && (
               <div className="cc-banner">
-                Restart luna-web to apply: {restart.join(", ")}.
+                Restart Luna to apply: {restart.join(", ")}.
                 <small> (Ctrl+C in its terminal, then <code>pnpm web</code>)</small>
               </div>
             )}

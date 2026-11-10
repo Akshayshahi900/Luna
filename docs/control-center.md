@@ -50,7 +50,7 @@ Each field has a badge saying when a change takes effect:
 | --- | --- |
 | **LIVE** | Read fresh on every use (mail and Google settings, which the MCP servers read per call) |
 | **INSTANT** | The agent is rebuilt right away with the same memory and MCP connections (persona, limits, API keys, auto-approve, sandbox, …) |
-| **RESTART** | Applied after restarting `luna-web` (storage paths, web server, voice, provider at startup, MCP server list). A banner lists them until you restart. |
+| **RESTART** | Applied after restarting Luna (`pnpm web`) (storage paths, web server, voice, provider at startup, MCP server list). A banner lists them until you restart. |
 
 A variable exported in your shell overrides `.env`, as it always has.
 

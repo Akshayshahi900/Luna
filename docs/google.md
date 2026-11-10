@@ -32,7 +32,7 @@ The sign-in code is `core/src/integrations/google.ts`.
 Access asked for: `gmail.readonly` (reading never marks mail as read),
 `gmail.send`, `calendar.events` (events only, not calendar settings) and
 `tasks`. A token from before a scope was added is refused with "missing
-access … run luna-google-auth again".
+access … run `pnpm google-auth`".
 
 Settings (`.env`):
 

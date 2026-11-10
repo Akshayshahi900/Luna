@@ -63,7 +63,7 @@ and no address bar, and Luna has its own window and taskbar icon.
 
 The first start downloads, in the background, Luna's voice (Piper
 `en_US-lessac-medium`, ~60 MB, into `data/voices/`) and her ears (Whisper
-`base.en`, ~140 MB, into `data/models/whisper/`). Both run locally on the
+`base.en`, 8-bit, ~75 MB, into `data/models/whisper/`). Both run locally on the
 CPU; nothing you say or hear leaves the machine, and it works in any
 modern browser (Chrome, Edge, Firefox, Safari).
 

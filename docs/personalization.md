@@ -5,7 +5,7 @@ long-term memory instead: see `docs/memory.md`.
 
 Luna's behaviour comes from her system prompt, which is built from a few
 settings plus an optional file (`core/src/agent/persona.ts`). Set them in
-`.env` and restart `luna` / `luna-web`.
+`.env` and restart `pnpm luna` / `pnpm web`.
 
 | Setting | Default | What it does |
 | --- | --- | --- |

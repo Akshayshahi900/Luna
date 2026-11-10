@@ -5,8 +5,8 @@ import { commandsOnly, copyText } from "./clipboard";
 describe("copy", () => {
   it("copies with the clipboard API", async () => {
     const written: string[] = [];
-    expect(await copyText("uv sync", { writeText: async (t) => void written.push(t) })).toBe(true);
-    expect(written).toEqual(["uv sync"]);
+    expect(await copyText("pnpm install", { writeText: async (t) => void written.push(t) })).toBe(true);
+    expect(written).toEqual(["pnpm install"]);
   });
 
   it("reports failure without a document to fall back to", async () => {
@@ -15,7 +15,7 @@ describe("copy", () => {
   });
 
   it("drops comment lines", () => {
-    expect(commandsOnly("cp .env.example .env\n# edit .env\n  # indented\nuv sync")).toBe("cp .env.example .env\nuv sync");
+    expect(commandsOnly("cp .env.example .env\n# edit .env\n  # indented\npnpm install")).toBe("cp .env.example .env\npnpm install");
   });
 });
 

@@ -12,7 +12,7 @@ const APPLIES_LABEL: Record<Applies, string> = {
 const APPLIES_HINT: Record<Applies, string> = {
   live: "Read fresh on every use",
   rebuild: "Applied right away (the agent is rebuilt)",
-  restart: "Applied after restarting luna-web",
+  restart: "Applied after restarting Luna (pnpm web)",
 };
 
 /** "max_model_calls" → "Max model calls" */
@@ -137,7 +137,7 @@ export function SettingsForm({ fields, onSaved, intro, compact }: Props) {
     try {
       const result = await api.saveSettings(values);
       const restart = Object.values(result.effects).includes("restart");
-      setNotice(result.rebuilt ? "Saved · agent rebuilt" : restart ? "Saved · restart luna-web to apply" : "Saved");
+      setNotice(result.rebuilt ? "Saved · agent rebuilt" : restart ? "Saved · restart Luna (pnpm web) to apply" : "Saved");
       onSaved(result);
     } catch (e) {
       setError((e as Error).message);

@@ -18,7 +18,7 @@ Design: [`spec/spec11.md`](../spec/spec11.md) · decision D39 in
    LUNA_TELEGRAM_BOT_TOKEN=123456789:AA...
    ```
 
-3. Restart `luna-web` (the token is read at startup). To keep it running
+3. Restart `pnpm web` (the token is read at startup). To keep it running
    without a window, for example on a home server, use
    `pnpm web --no-window`.
 4. Send your bot any message. It replies with **your Telegram user id**.
@@ -113,13 +113,13 @@ to 5 minutes long.
 
 | Symptom | Fix |
 | --- | --- |
-| No reply at all | Is `luna-web` running? Is the token right? The terminal prints `Telegram: …` errors |
+| No reply at all | Is `pnpm web` running? Is the token right? The terminal prints `Telegram: …` errors |
 | "Sorry, I only work for my owner" | Add the id it shows to `LUNA_TELEGRAM_ALLOWED_USERS` |
 | "voice notes need Whisper" | Set `LUNA_STT_ENGINE=whisper` and restart |
 | "ffmpeg is needed for voice notes" | Install `ffmpeg` (voice notes are OGG/Opus; it decodes them and encodes Luna's voice replies) |
 | No voice replies | Needs Piper (`LUNA_TTS_ENGINE=piper`, with `espeak-ng` installed: [`web-ui.md`](web-ui.md#voice-setup)), `ffmpeg`, and `LUNA_TELEGRAM_VOICE_REPLIES=true` |
 | Error after sending a photo | Your model can't read images: set `LUNA_MODEL_VISION=false` |
-| Two Luna instances, one token | Telegram serves updates to one poller only. Run one `luna-web` per bot |
+| Two Luna instances, one token | Telegram serves updates to one poller only. Run one `pnpm web` per bot |
 
 ## WhatsApp?
 
