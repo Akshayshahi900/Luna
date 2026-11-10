@@ -101,7 +101,7 @@ export const FIELDS = {
   model_name: { kind: "str", default: "nvidia/nemotron-3-ultra-550b-a55b", description: "OpenRouter model slug" },
   openrouter_api_key: { kind: "str", default: null, optional: true },
   groq_api_key: { kind: "str", default: null, optional: true },
-  groq_model: { kind: "str", default: "llama-3.3-70b-versatile", description: "Groq model id" },
+  groq_model: { kind: "str", default: "openai/gpt-oss-120b", description: "Groq model id (see the model list in the Control Center)" },
   // Ollama (local, no key). Its OpenAI-compatible endpoint ends in /v1.
   ollama_base_url: { kind: "str", default: "http://localhost:11434/v1", description: "Ollama /v1 URL" },
   ollama_model: { kind: "str", default: "qwen3:8b", description: "Ollama model tag (must support tools)" },
@@ -234,12 +234,6 @@ export const FIELDS = {
   tts_voice: { kind: "str", default: "en_US-lessac-medium", description: "Piper voice name, downloaded once into tts_voices_dir" },
   tts_voices_dir: { kind: "path", default: DEFAULT_VOICES_DIR, description: "Where Piper voices are kept" },
   tts_length_scale: { kind: "float", default: 0.95, description: "Piper speaking pace: < 1 faster, > 1 slower" },
-  tts_piper_command: {
-    kind: "str",
-    default: null,
-    optional: true,
-    description: "The Piper TTS program (command or path). Empty = data/piper/piper, then piper on PATH (voice/tts.ts)",
-  },
 
   // --- Voice input (web UI) ---
   stt_engine: {
@@ -249,7 +243,7 @@ export const FIELDS = {
     validate: oneOf("stt_engine", ["whisper", "browser"]),
   },
   stt_model: { kind: "str", default: "base.en", description: "Whisper model: tiny.en (fastest), base.en, small.en (most accurate)" },
-  stt_models_dir: { kind: "path", default: DEFAULT_STT_DIR, description: "Where Whisper models are kept" },
+  stt_models_dir: { kind: "path", default: DEFAULT_STT_DIR, description: "Where Whisper models are kept (downloaded once)" },
   stt_threads: { kind: "int", default: 4, description: "CPU threads for Whisper" },
 
   // --- Routines (routines/; docs/control-center.md) ---
@@ -332,7 +326,6 @@ export interface Settings {
   tts_voice: string;
   tts_voices_dir: string;
   tts_length_scale: number;
-  tts_piper_command: string | null;
   stt_engine: string;
   stt_model: string;
   stt_models_dir: string;

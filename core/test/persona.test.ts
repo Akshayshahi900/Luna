@@ -114,7 +114,7 @@ test("describeProviders marks configured", () => {
   expect(info.openrouter.configured).toBe(true);
   expect(info.groq.configured).toBe(false);
   expect(info.ollama.configured).toBe(true); // local, no key
-  expect(info.groq.default_model).toBe("llama-3.3-70b-versatile");
+  expect(info.groq.default_model).toBe("openai/gpt-oss-120b");
 });
 
 afterEach(() => vi.unstubAllGlobals());

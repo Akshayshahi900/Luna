@@ -1,34 +1,45 @@
 /**
- * Speech-to-text with Whisper (whisper.cpp), running locally on the CPU.
+ * Speech-to-text with Whisper, running locally on the CPU.
  *
  * BEGINNER MAP
  * ------------
  * The browser records one utterance at a time (it detects when you start and
  * stop talking), sends it to POST /api/stt as a 16 kHz WAV, and gets text
- * back. Nothing leaves your machine, and it works in any browser.
+ * back. Nothing leaves your machine, and it works in any browser. Telegram
+ * voice notes (channels/telegram.ts) use the same engine.
  *
- *   - Engine: whisper.cpp through @fugood/whisper.node (prebuilt binaries,
- *     nothing to compile). The model stays loaded between utterances.
- *   - Model: LUNA_STT_MODEL (default base.en, ~140 MB), the ggml file
- *     ggml-<model>.bin, downloaded once into data/models/whisper.
- *     small.en is more accurate and slower.
- *   - The prompt "Hey Luna." makes Whisper spell the wake word as "Luna"
- *     instead of "Lunar" (D22). Wake-word logic itself lives in the browser
- *     (web/src/lib/intent.ts).
+ *   - Engine: Whisper as ONNX through @huggingface/transformers, which runs
+ *     on onnxruntime: prebuilt for Linux, macOS and Windows, and it picks
+ *     the CPU's fastest instructions (AVX2, AVX-512, NEON…) at runtime, so
+ *     nothing is compiled and nothing breaks on an older CPU (D41).
+ *   - Model: LUNA_STT_MODEL (default base.en → onnx-community/whisper-base.en,
+ *     the 8-bit "q8" files, ~75 MB), downloaded once into data/models/whisper
+ *     and kept loaded. tiny.en is faster, small.en more accurate. A full
+ *     Hugging Face id ("org/name") works too.
+ *   - Silence gate: Whisper invents words for silence ("you", "Thank
+ *     you."), so audio with no loud-enough 20 ms frames returns "" without
+ *     running the model. (The Python version used faster-whisper's Silero
+ *     VAD filter for the same reason.)
+ *   - Measured on a laptop CPU (i5-12450H): ~0.9 s for a 2 s command with
+ *     base.en.
+ *
+ * The browser accepts the ways Whisper may spell the wake word ("Luna",
+ * "Lunar", …; web/src/lib/intent.ts), so no text prompt is needed.
  *
  * LUNA_STT_ENGINE=browser turns this off; the UI then uses Chrome/Edge
  * speech recognition and has no wake word.
  */
 
-import path from "node:path";
-
 import type { Settings } from "../config/settings.ts";
-import { downloadOnce } from "./download.ts";
-import { MAX_SECONDS, SAMPLE_RATE, wavToPcm } from "./wav.ts";
+import { MAX_SECONDS, pcmToFloat, SAMPLE_RATE, wavToPcm } from "./wav.ts";
 
 export { MAX_SECONDS, SAMPLE_RATE, wavToPcm };
-export const WAKE_PROMPT = "Hey Luna.";
-const MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
+
+// A 20 ms frame counts as sound above this RMS (~ -46 dBFS); an utterance
+// needs at least MIN_LOUD_FRAMES of them (60 ms) to be sent to Whisper.
+const FRAME = SAMPLE_RATE / 50;
+const LOUD_RMS = 0.005;
+const MIN_LOUD_FRAMES = 3;
 
 /** What /api/stt needs from an engine (tests pass fakes). */
 export interface SpeechToText {
@@ -36,17 +47,35 @@ export interface SpeechToText {
   warmUp(): Promise<void>;
 }
 
-interface NativeContext {
-  transcribeData(data: ArrayBuffer, options: Record<string, unknown>): { promise: Promise<{ result: string }>; stop(): Promise<void> };
-  release(): Promise<void>;
+/** True when the audio has enough loud frames to hold any speech. */
+export function hasSound(samples: Float32Array): boolean {
+  let loud = 0;
+  for (let start = 0; start + FRAME <= samples.length; start += FRAME) {
+    let sum = 0;
+    for (let i = start; i < start + FRAME; i++) sum += samples[i] * samples[i];
+    if (Math.sqrt(sum / FRAME) > LOUD_RMS && ++loud >= MIN_LOUD_FRAMES) return true;
+  }
+  return false;
 }
 
-/** Loads one whisper.cpp model on first use; transcribes utterances one at a time. */
+/** Whisper's text, without its "[BLANK_AUDIO]" / "(music)" style notes. */
+export function cleanTranscript(text: string): string {
+  return text.replace(/\[[^\]]*\]|\([^)]*\)/g, " ").split(/\s+/).filter(Boolean).join(" ");
+}
+
+/** LUNA_STT_MODEL → a Hugging Face model id ("base.en" → onnx-community/whisper-base.en). */
+export function modelId(name: string): string {
+  return name.includes("/") ? name : `onnx-community/whisper-${name}`;
+}
+
+type Recognizer = ((audio: Float32Array) => Promise<{ text?: string } | { text?: string }[]>) & { dispose?(): Promise<void> };
+
+/** Loads one Whisper model on first use; transcribes utterances one at a time. */
 export class WhisperSTT implements SpeechToText {
   readonly modelName: string;
   readonly modelsDir: string;
   readonly threads: number;
-  #context: Promise<NativeContext> | null = null;
+  #recognizer: Promise<Recognizer> | null = null;
   #queue: Promise<unknown> = Promise.resolve(); // one transcription at a time keeps CPU use predictable
 
   constructor(model: string, modelsDir: string, threads = 4) {
@@ -55,35 +84,35 @@ export class WhisperSTT implements SpeechToText {
     this.threads = threads;
   }
 
-  /** The ggml model file (downloaded on first use). */
-  get modelPath(): string {
-    return path.join(this.modelsDir, `ggml-${this.modelName}.bin`);
+  /** The Hugging Face model this engine uses (cached under modelsDir). */
+  get model(): string {
+    return modelId(this.modelName);
   }
 
-  #load(): Promise<NativeContext> {
-    this.#context ??= (async () => {
+  #load(): Promise<Recognizer> {
+    this.#recognizer ??= (async () => {
       console.error(`Loading Whisper ${this.modelName} (the first time downloads it)…`);
-      await downloadOnce(`${MODEL_URL}/ggml-${this.modelName}.bin`, this.modelPath);
-      const whisper = (await import("@fugood/whisper.node" as string)) as { initWhisper(o: Record<string, unknown>): Promise<NativeContext> };
-      return whisper.initWhisper({ model: this.modelPath, useGpu: false });
+      const transformers = await import("@huggingface/transformers");
+      transformers.env.cacheDir = this.modelsDir;
+      return (await transformers.pipeline("automatic-speech-recognition", this.model, {
+        dtype: "q8",
+        device: "cpu",
+        session_options: { intraOpNumThreads: this.threads },
+      } as never)) as unknown as Recognizer;
     })();
-    this.#context.catch(() => (this.#context = null)); // try again next time
-    return this.#context;
+    this.#recognizer.catch(() => (this.#recognizer = null)); // try again next time
+    return this.#recognizer;
   }
 
-  /** Text for one utterance (16-bit PCM at 16 kHz). */
-  transcribe(pcm: Buffer, _samples: number, prompt: string | null = WAKE_PROMPT): Promise<string> {
+  /** Text for one utterance (16-bit PCM at 16 kHz); "" when it is silent. */
+  transcribe(pcm: Buffer, _samples: number, _prompt: string | null = null): Promise<string> {
+    const audio = pcmToFloat(pcm);
+    if (!hasSound(audio)) return Promise.resolve("");
     const job = this.#queue.then(async () => {
-      const context = await this.#load();
-      const data = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer;
-      const { promise } = context.transcribeData(data, {
-        language: this.modelName.endsWith(".en") ? "en" : "auto",
-        maxThreads: this.threads,
-        beamSize: 1, // greedy: much faster, same result on short commands
-        ...(prompt ? { prompt } : {}),
-      });
-      const { result } = await promise;
-      return (result ?? "").split(/\s+/).filter(Boolean).join(" ");
+      const recognizer = await this.#load();
+      const result = await recognizer(audio);
+      const text = Array.isArray(result) ? result.map((r) => r.text ?? "").join(" ") : (result.text ?? "");
+      return cleanTranscript(text);
     });
     this.#queue = job.catch(() => undefined);
     return job;
@@ -92,8 +121,8 @@ export class WhisperSTT implements SpeechToText {
   /** Download/load the model in the background so the first command is quick. */
   async warmUp(): Promise<void> {
     try {
-      const silence = Buffer.alloc((SAMPLE_RATE / 2) * 2);
-      await this.transcribe(silence, SAMPLE_RATE / 2);
+      const recognizer = await this.#load();
+      await recognizer(new Float32Array(SAMPLE_RATE / 2)); // one run builds the ONNX graphs
       console.error(`Whisper ${this.modelName} ready`);
     } catch (error) {
       // the UI falls back to browser recognition
@@ -102,8 +131,9 @@ export class WhisperSTT implements SpeechToText {
   }
 
   async close(): Promise<void> {
-    const context = await this.#context?.catch(() => null);
-    await context?.release();
+    const recognizer = await this.#recognizer?.catch(() => null);
+    await recognizer?.dispose?.();
+    this.#recognizer = null;
   }
 }
 

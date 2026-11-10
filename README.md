@@ -18,8 +18,8 @@ actions (writing files, running commands, sending things) ask you first.
   directly, no build step) and [pnpm](https://pnpm.io) 10 or newer
 - An [OpenRouter](https://openrouter.ai/keys) or [Groq](https://console.groq.com/keys)
   API key, or a local [Ollama](https://ollama.com) model that supports tools
-- For voice (optional): the [Piper](https://github.com/rhasspy/piper/releases)
-  program for Luna's voice, and `ffmpeg` for Telegram voice notes
+- For voice (optional): `espeak-ng` for Luna's voice, and `ffmpeg` for
+  Telegram voice notes (both from your package manager)
 
 ## Quick start
 
@@ -50,10 +50,9 @@ click `SESSION · … ▾`.
 pnpm web   # opens Luna in its own window (or http://127.0.0.1:8765)
 ```
 
-Voice runs fully on your machine: Luna listens with Whisper (whisper.cpp)
-and speaks with Piper (models download once, ~200 MB). Piper is a separate
-program: unpack a [release](https://github.com/rhasspy/piper/releases) into
-`data/piper/` (or set `LUNA_TTS_PIPER_COMMAND`). Turn on **WAKE** and say
+Voice runs fully on your machine. Luna listens with Whisper and speaks
+with a Piper voice, both on onnxruntime (models download once, ~135 MB),
+and Piper uses `espeak-ng` for phonemes. Turn on **WAKE** and say
 **"Hey Luna, …"** for hands-free use; "Luna, cancel" stops a task. Or press
 **Space** to talk, **T** for the chat transcript, **M** to switch
 between OpenRouter, Groq and Ollama models. Details and dev
@@ -76,6 +75,46 @@ Run the tests (no API key needed, the model is faked):
 pnpm test             # the backend (core/, vitest)
 cd web && pnpm test   # web UI logic (vitest)
 ```
+
+## How it works
+
+Every message, from the terminal, the web UI, Telegram or a scheduled
+routine, goes through one agent loop. The main agent answers directly, uses
+a tool, or hands a bigger job to a helper agent:
+
+```mermaid
+flowchart LR
+    subgraph doors["Front doors"]
+        CLI["CLI<br/>cli/chat.ts runTurn"]
+        WEB["Browser tab<br/>web/session.ts Session"]
+        TG["Telegram chat<br/>channels/telegram.ts Chat"]
+        RT["Agent routine<br/>routines/agent.ts"]
+    end
+
+    CLI & WEB & TG & RT --> RUN["runTask<br/>agent/runner.ts<br/>TaskBudget + stream"]
+
+    subgraph agent["Main agent (agent/builder.ts, createAgent)"]
+        LOOP["agent loop<br/>middleware → model → tools"]
+    end
+
+    RUN --> LOOP
+    LOOP <-->|"chat completions"| LLM[("LLM API<br/>OpenRouter / Groq / Ollama<br/>agent/providers.ts")]
+    LOOP --> BUILTIN["built-in tools<br/>calculator, time, ask_user,<br/>write_todos, write_note, memory tools"]
+    LOOP --> MAINMCP["untagged MCP tools<br/>(demo)"]
+    LOOP --> HELPERS["ask_* helpers<br/>agent/subagents/"]
+    HELPERS <-->|"own loop"| LLM
+    HELPERS --> FS["files / shell<br/>tools/fs.ts, tools/shell.ts"]
+    HELPERS --> WEBS["Tavily web search"]
+    HELPERS --> MCP["tagged MCP servers<br/>core/servers/tasks, mail, google<br/>(stdio subprocesses)"]
+
+    LOOP <--> CKPT[("checkpoints<br/>data/luna_checkpoints.sqlite<br/>messages, notes, todos, pauses")]
+    LOOP <--> LTM[("long-term memory<br/>data/luna_longterm.sqlite")]
+    RUN -->|"events"| OUT["what you see:<br/>tokens, tool calls,<br/>pauses, done"]
+```
+
+Step by step (the agent loop, what is sent to the model, helpers) and how to
+trace each prompt: [`docs/prompt-lifecycle.md`](docs/prompt-lifecycle.md).
+Every file: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## New here? Read this first
 

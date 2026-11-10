@@ -19,7 +19,7 @@ The web UI can switch provider and model live (**M**).
 | `LUNA_MODEL_NAME` | `nvidia/nemotron-3-ultra-550b-a55b` | OpenRouter model slug |
 | `LUNA_OPENROUTER_API_KEY` | — | OpenRouter key (<https://openrouter.ai/keys>) |
 | `LUNA_GROQ_API_KEY` | — | Groq key (<https://console.groq.com/keys>) |
-| `LUNA_GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model id |
+| `LUNA_GROQ_MODEL` | `openai/gpt-oss-120b` | Groq model id (Groq retired llama-3.3-70b-versatile) |
 | `LUNA_OLLAMA_BASE_URL` | `http://localhost:11434/v1` | Ollama's OpenAI-compatible URL |
 | `LUNA_OLLAMA_MODEL` | `qwen3:8b` | Ollama model tag (must support tool calling) |
 | `LUNA_MODEL_MAX_RETRIES` | `1` | Retries for a failed request; each is another API call |
@@ -116,13 +116,12 @@ See [`web-ui.md`](web-ui.md).
 | `LUNA_WEB_BROWSER` | first found | Chrome / Chromium / Edge / Brave command or path for the window |
 | `LUNA_STT_ENGINE` | `whisper` | `whisper` (local, wake word) or `browser` |
 | `LUNA_STT_MODEL` | `base.en` | `tiny.en`, `base.en` or `small.en` |
-| `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Whisper model cache (`ggml-<model>.bin`, downloaded once) |
+| `LUNA_STT_MODELS_DIR` | `data/models/whisper` | Whisper model cache (ONNX files, downloaded once) |
 | `LUNA_STT_THREADS` | `4` | CPU threads for Whisper |
 | `LUNA_TTS_ENGINE` | `piper` | `piper` (local voice) or `browser` |
 | `LUNA_TTS_VOICE` | `en_US-lessac-medium` | Piper voice name |
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Piper voice cache |
 | `LUNA_TTS_LENGTH_SCALE` | `0.95` | Speaking pace: < 1 faster, > 1 slower |
-| `LUNA_TTS_PIPER_COMMAND` | *(empty)* | The Piper program; empty = `data/piper/piper`, then `piper` on PATH ([`web-ui.md`](web-ui.md#voice-setup)) |
 
 ## Routines
 

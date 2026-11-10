@@ -71,7 +71,7 @@ export const GROUPS: [string, string, FieldName[]][] = [
     "web_host", "web_port", "web_allowed_origins", "web_open_window", "web_close_with_window", "web_browser",
   ]],
   ["voice", "Voice", [
-    "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale", "tts_piper_command",
+    "tts_engine", "tts_voice", "tts_voices_dir", "tts_length_scale",
     "stt_engine", "stt_model", "stt_models_dir", "stt_threads",
   ]],
   ["routines", "Routines", ["routines_enabled", "routines_path"]],
@@ -107,7 +107,7 @@ const RESTART = new Set<string>([
   "provider", "model_name", "memory_backend", "checkpoint_path", "enable_longterm_memory",
   "longterm_memory_path", "mcp_config_path", "enable_mcp_tools", "web_host", "web_port",
   "web_allowed_origins", "web_open_window", "web_close_with_window", "web_browser", "tts_engine", "tts_voice",
-  "tts_voices_dir", "tts_length_scale", "tts_piper_command", "stt_engine", "stt_model", "stt_models_dir", "stt_threads",
+  "tts_voices_dir", "tts_length_scale", "stt_engine", "stt_model", "stt_models_dir", "stt_threads",
   "routines_enabled", "routines_path",
   "telegram_bot_token", // the bot starts with luna-web (channels/telegram.ts)
 ]);

@@ -19,6 +19,7 @@ Website: <https://akshayshahi900.github.io/Luna/> (source in [`site/`](../site/)
 - [Development](development.md): setup, layout, tests, web dev
 - [Agents and tools](agents-and-tools.md): helpers, MCP, adding tools and helpers
 - [Architecture](../ARCHITECTURE.md): one message end to end, file by file
+- [The life of a prompt](prompt-lifecycle.md): diagrams of one message through the agent loop, what the LLM receives, and how to trace and measure it
 - [Decisions](../DECISIONS.md): why things are the way they are
 - [Beginner guide](../spec/beginner-guide.md) and design specs in [`spec/`](../spec/)
 - [Contributing](../CONTRIBUTING.md) · [Security](../SECURITY.md)

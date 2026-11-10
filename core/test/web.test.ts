@@ -488,7 +488,7 @@ describe("voice", () => {
     expect(createStt(settings({ stt_engine: "browser" }))).toBeNull();
     const engine = createStt(settings({ stt_engine: "Whisper", stt_model: "small.en" }))!;
     expect(engine.modelName).toBe("small.en");
-    expect(engine.modelPath.endsWith("ggml-small.en.bin")).toBe(true);
+    expect(engine.model).toBe("onnx-community/whisper-small.en");
     expect(() => settings({ stt_engine: "vosk" })).toThrow();
   });
 });

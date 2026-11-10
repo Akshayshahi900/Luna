@@ -298,7 +298,7 @@ export const SPECS: { group: string; rows: [string, string][] }[] = [
   {
     group: "Voice",
     rows: [
-      ["Speech in", "Whisper via whisper.cpp (tiny.en / base.en / small.en), local CPU"],
+      ["Speech in", "Whisper on onnxruntime (tiny.en / base.en / small.en), local CPU"],
       ["Speech out", "Piper neural TTS (en_US-lessac-medium by default), local CPU"],
       ["Wake word", "“Hey Luna”, detected in the page while it's open"],
     ],
@@ -348,7 +348,7 @@ export interface InstallStep {
 export const INSTALL: InstallStep[] = [
   {
     title: "Get the code and the tools",
-    text: "You need Node.js 22.18 or newer and pnpm. For Luna's voice, also the Piper program (unpack it into data/piper/).",
+    text: "You need Node.js 22.18 or newer and pnpm. For Luna's voice, also espeak-ng (from your package manager).",
     code: "git clone https://github.com/Akshayshahi900/Luna.git\ncd Luna\npnpm install && pnpm build",
   },
   {

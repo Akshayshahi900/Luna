@@ -39,7 +39,7 @@ core/
     routines/                 cron, store, builtin, agent, scheduler
     web/                      server (Hono + ws), session, events, control, window
     channels/                 telegram, telegram_api, media (ffmpeg)
-    voice/                    stt (whisper.cpp), tts (Piper program), wav, download
+    voice/                    stt (Whisper ONNX), tts (Piper voice ONNX + espeak-ng), wav, download
     integrations/google.ts    OAuth (google-auth token.json format kept)
     util/zoned.ts             wall-clock time in an IANA zone
   servers/                    demo, tasks, mail, google, common (MCP SDK)
@@ -56,8 +56,8 @@ core/
 | pydantic-settings | `config/settings.ts`: a field table + loader |
 | `sqlite3` | `better-sqlite3` (same schemas) |
 | Starlette + uvicorn | Hono on Node's `http` + `ws` for `/ws` |
-| faster-whisper | `@fugood/whisper.node` (whisper.cpp, prebuilt) |
-| piper-tts | the Piper program (`data/piper/`, PATH or `LUNA_TTS_PIPER_COMMAND`) |
+| faster-whisper | `@huggingface/transformers` Whisper on onnxruntime, plus a silence gate (D43) |
+| piper-tts | the same Piper voices on onnxruntime, with espeak-ng phonemes (D43) |
 | PyAV | `ffmpeg` |
 | google-api-python-client | `googleapis` |
 | imaplib / smtplib / email | imapflow / nodemailer / mailparser |
@@ -103,12 +103,12 @@ core/
 | `data/google/token.json` | yes: read and written in google-auth's format |
 | `data/voices/*.onnx` | yes, Piper uses the same voice files |
 | `data/luna_memory.sqlite` (threads) | **no**: msgpack checkpoints LangGraph JS can't read; new threads go to `data/luna_checkpoints.sqlite` |
-| `data/models/whisper/` (faster-whisper) | no: whisper.cpp uses `ggml-<model>.bin`, downloaded once |
+| `data/models/whisper/` (faster-whisper) | no: the ONNX Whisper model downloads once next to it |
 
 ## 5. Tests (`core/test/`, offline)
 
-The pytest suite was ported test by test to vitest. It has 310 tests over
-19 files, uses the same fake chat model, and needs no network or API key.
+The pytest suite was ported test by test to vitest. It has 316 tests over
+20 files (one, the real voice round trip, only with `LUNA_VOICE_TESTS=1`), uses the same fake chat model, and needs no network or API key.
 New in the port:
 - Echoed messages aren't reported twice.
 - Python token files are accepted.
@@ -119,9 +119,8 @@ New in the port:
 
 ## 6. Later
 
-- Keep one Piper process alive (`--json-input`) instead of one run per
-  sentence. That waits on testing its output protocol.
-- Re-measure STT and TTS latency against the Python numbers in
-  `docs/web-ui.md`.
-- Silero VAD in whisper.cpp (`initWhisperVad`), if noise starts to produce
-  invented words.
+- Re-measure STT accuracy on real voices (the accented-voice notes in
+  `docs/web-ui.md` are from faster-whisper). Voice speed was re-measured
+  (D43): STT ~0.9 s per 2 s command, TTS ~0.17 s per sentence.
+- A model-based VAD (Silero on onnxruntime) if the energy gate lets noise
+  through.

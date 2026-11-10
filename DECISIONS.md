@@ -612,7 +612,8 @@ already. The port kept behaviour, so the web UI didn't change.
   threads.** The Python checkpoints are msgpack blobs that LangGraph JS
   can't read, so threads now live in a new `data/luna_checkpoints.sqlite`
   and `data/luna_memory.sqlite` is left alone.
-- **Voice uses native programs, not Python wheels.** STT is whisper.cpp
+- **Voice uses native programs, not Python wheels** (superseded by D43,
+  which runs both engines on onnxruntime). STT is whisper.cpp
   through `@fugood/whisper.node`: prebuilt binaries for every platform,
   nothing to compile, and the model (`ggml-<name>.bin`, downloaded once)
   stays loaded. TTS runs the Piper program once per sentence
@@ -675,3 +676,50 @@ Ruled out:
 - **Keeping npm.** It meant three lockfiles and three installs.
 - **A pnpm install per package without a workspace.** That keeps three
   lockfiles and gains nothing.
+
+## D43 — Voice runs on onnxruntime: Whisper and Piper voices in-process (2026-11-10, spec12)
+D41's voice plan failed when it was first run for real, so both engines now
+run on onnxruntime inside Luna:
+- **What failed:**
+  - The prebuilt `@fugood/whisper.node` 1.2.0-rc crashed with SIGILL: it was
+    built for AVX-512, and this i5-12450H only has AVX2.
+  - The stable 1.1.3 has no SIMD at all: 24 s for a 2 s command.
+  - Running the downloaded Piper program wasn't allowed (unreviewed binary),
+    so it could never be tested here. It would also have reloaded the voice
+    for every sentence.
+- **STT:** Whisper as ONNX through `@huggingface/transformers`
+  (`onnx-community/whisper-<model>`, the 8-bit files, ~75 MB for base.en).
+  - onnxruntime ships prebuilt binaries for every platform and picks the
+    CPU's best instructions at runtime.
+  - Measured: ~0.9 s for a 2 s command, with the exact text.
+  - fp32 was no faster and four times larger.
+- **Silence gate:** Whisper invents "you" / "Thank you." for silence. The
+  Python version prevented that with faster-whisper's Silero VAD. Now audio
+  without 60 ms above about -46 dBFS returns "" and never reaches the model,
+  and `[BLANK_AUDIO]`-style notes are stripped.
+- **TTS:** the same Piper voices (`data/voices/*.onnx`) on onnxruntime,
+  loaded once. Phonemes come from the `espeak-ng` program, one clause at a
+  time so the punctuation (pauses) is kept. Ids follow Piper's rule: ^, each
+  phoneme followed by the pad, then $. Audio is peak-normalised like Piper.
+  - Measured: 0.17 s for a 3.9 s sentence.
+  - Whisper transcribes the output word for word, which checks the phoneme
+    pipeline.
+  - `LUNA_TTS_PIPER_COMMAND` is gone; espeak-ng (any package manager) is the
+    only system dependency, next to ffmpeg for Telegram.
+- **No text prompt for Whisper:** transformers.js has no simple prompt
+  option, and the browser already accepts the wake-word spellings
+  ("Lunar"…), so it isn't needed.
+- **Real round-trip test:** `LUNA_VOICE_TESTS=1 pnpm test` speaks a
+  sentence with Piper and checks that Whisper understands it. It's off by
+  default because it needs the models.
+- **The Groq default model changed** to `openai/gpt-oss-120b`: Groq retired
+  `llama-3.3-70b-versatile` (404 "model does not exist"), which broke a
+  default Groq setup.
+
+Ruled out:
+- **Compiling whisper.cpp on install** (build from source): every install
+  would then need cmake and a compiler.
+- **The system whisper.cpp / Piper programs:** an extra install on every
+  platform, and the Piper program couldn't be verified here.
+- **Silero VAD as a model:** a 2-line energy gate does the job for
+  utterances the browser has already cut, and Telegram voice notes.

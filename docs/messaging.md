@@ -117,7 +117,7 @@ to 5 minutes long.
 | "Sorry, I only work for my owner" | Add the id it shows to `LUNA_TELEGRAM_ALLOWED_USERS` |
 | "voice notes need Whisper" | Set `LUNA_STT_ENGINE=whisper` and restart |
 | "ffmpeg is needed for voice notes" | Install `ffmpeg` (voice notes are OGG/Opus; it decodes them and encodes Luna's voice replies) |
-| No voice replies | Needs Piper (`LUNA_TTS_ENGINE=piper`, the program installed: [`web-ui.md`](web-ui.md#voice-setup)), `ffmpeg`, and `LUNA_TELEGRAM_VOICE_REPLIES=true` |
+| No voice replies | Needs Piper (`LUNA_TTS_ENGINE=piper`, with `espeak-ng` installed: [`web-ui.md`](web-ui.md#voice-setup)), `ffmpeg`, and `LUNA_TELEGRAM_VOICE_REPLIES=true` |
 | Error after sending a photo | Your model can't read images: set `LUNA_MODEL_VISION=false` |
 | Two Luna instances, one token | Telegram serves updates to one poller only. Run one `luna-web` per bot |
 

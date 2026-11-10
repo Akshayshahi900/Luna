@@ -25,21 +25,21 @@ cd web && pnpm dev           # terminal 2: page on http://localhost:5173
 
 Both voice engines run on your machine:
 
-- **Listening (Whisper):** nothing to install. `@fugood/whisper.node`
-  ships whisper.cpp prebuilt for Linux, macOS and Windows. The model
-  (`ggml-base.en.bin`, ~140 MB) downloads once into `data/models/whisper/`
-  the first time. The Python version's faster-whisper files in that folder
-  aren't used any more and can be deleted.
-- **Speaking (Piper):** a separate program. Download a release for your
-  system from <https://github.com/rhasspy/piper/releases> and unpack it so
-  that `data/piper/piper` exists, or put `piper` on your PATH, or set
-  `LUNA_TTS_PIPER_COMMAND` to its full path. The voice (~60 MB) downloads
-  once into `data/voices/`. Luna checks that the program's `--help`
-  mentions `--model`, so a different program that happens to be called
-  `piper` (some Linux systems have a gaming-mouse tool by that name) is
-  never run as the voice.
+- **Listening (Whisper):** nothing to install. Whisper runs as ONNX on
+  onnxruntime (`@huggingface/transformers`), prebuilt for Linux, macOS and
+  Windows. The model (`onnx-community/whisper-base.en`, 8-bit, ~75 MB)
+  downloads once into `data/models/whisper/`. The Python version's
+  faster-whisper folders there (`models--Systran--…`) aren't used any more
+  and can be deleted.
+- **Speaking (Piper voices):** install `espeak-ng` (`dnf install espeak-ng`,
+  `apt install espeak-ng`, `brew install espeak-ng`). It turns text into
+  phonemes; the Piper voice itself (~60 MB, `data/voices/`) runs on the
+  same onnxruntime inside Luna. Voices you already have are reused.
 - **Telegram voice notes** also need `ffmpeg` (`dnf install ffmpeg`,
   `apt install ffmpeg`, `brew install ffmpeg`).
+
+A missing piece never breaks Luna. The UI just falls back to the browser's
+speech, and the terminal running `pnpm web` says why.
 
 Vite proxies `/ws` and `/api` to `:8765` (override with `LUNA_BACKEND=http://host:port`).
 
@@ -140,11 +140,12 @@ The browser records, the server transcribes:
    silence, and keeps 500 ms from before the start so the first syllable
    isn't cut.
 2. Each utterance is resampled to 16 kHz WAV and sent to `POST /api/stt`.
-   The server runs **Whisper** (whisper.cpp, greedy decoding on CPU),
-   prompted with "Hey Luna." so it spells her name right. The model stays
-   loaded between utterances. (The timings below were measured with the
-   Python version's faster-whisper and haven't been re-measured with
-   whisper.cpp yet.)
+   The server runs **Whisper** (base.en on onnxruntime, loaded once).
+   Audio with no 60 ms above about -46 dBFS counts as silence and returns
+   "" without running the model, because Whisper invents words like "you"
+   for silence. About 0.9 s for a 2 s command on a laptop CPU (i5-12450H).
+   (The accuracy notes below were measured with the Python version's
+   faster-whisper.)
 3. The browser decides what to do with the text:
    - starts with the wake phrase ("Hey Luna", "Luna", and the ways
      Whisper mishears it: "Lunar", "Hey-Lunar"…) → a command;
@@ -173,10 +174,10 @@ wake word; WAKE becomes CONVO: listen again after each reply).
 Luna's replies are spoken by **Piper**, a small neural voice that runs
 locally on the CPU (Windows, macOS, Linux). Each sentence is synthesized by
 `POST /api/tts` as soon as it's complete, so the next one is ready while
-the current one plays. The server runs the Piper program once per sentence
-(`--output_file`, text on stdin), which also loads the voice each time;
-keeping one Piper process alive is the next step if that delay shows
-(DECISIONS.md D41).
+the current one plays. Inside the server, espeak-ng gives the phonemes
+(one clause at a time, keeping its punctuation for pauses), and the voice's
+ONNX model turns them into audio. The model stays loaded. A 4 s sentence
+takes about 0.2 s on a laptop CPU (D43).
 
 The browser plays the audio through an `AnalyserNode` and the core
 follows the actual sound, every frame:
@@ -224,7 +225,7 @@ is `LUNA_PROVIDER`).
 | Env var | Default | Meaning |
 | --- | --- | --- |
 | `LUNA_PROVIDER` | `openrouter` | Startup provider: `openrouter`, `groq` or `ollama` |
-| `LUNA_GROQ_API_KEY` / `LUNA_GROQ_MODEL` | — / `llama-3.3-70b-versatile` | Groq |
+| `LUNA_GROQ_API_KEY` / `LUNA_GROQ_MODEL` | — / `openai/gpt-oss-120b` | Groq |
 | `LUNA_OLLAMA_BASE_URL` / `LUNA_OLLAMA_MODEL` | `http://localhost:11434/v1` / `qwen3:8b` | Ollama |
 | `LUNA_STT_ENGINE` | `whisper` | `whisper` (local, any browser, wake word) or `browser` (Chrome/Edge) |
 | `LUNA_STT_MODEL` | `base.en` | `tiny.en` (fastest), `base.en`, `small.en` (most accurate) |
@@ -234,7 +235,6 @@ is `LUNA_PROVIDER`).
 | `LUNA_TTS_VOICE` | `en_US-lessac-medium` | Piper voice, downloaded once |
 | `LUNA_TTS_VOICES_DIR` | `data/voices` | Where voices are kept |
 | `LUNA_TTS_LENGTH_SCALE` | `0.95` | Speaking pace (< 1 faster) |
-| `LUNA_TTS_PIPER_COMMAND` | *(empty)* | The Piper program (empty = `data/piper/piper`, then PATH) |
 | `LUNA_WEB_HOST` | `127.0.0.1` | Listen address. Keep it local: the agent can write files and run commands. |
 | `LUNA_WEB_PORT` | `8765` | Port |
 | `LUNA_WEB_ALLOWED_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Extra browser origins allowed to open the socket (the server's own origin is always allowed) |

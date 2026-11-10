@@ -16,6 +16,38 @@ approvals (`docs/messaging.md`).
 
 ## Topology
 
+```mermaid
+flowchart LR
+    subgraph doors["Front doors"]
+        CLI["CLI<br/>cli/chat.ts runTurn"]
+        WEB["Browser tab<br/>web/session.ts Session"]
+        TG["Telegram chat<br/>channels/telegram.ts Chat"]
+        RT["Agent routine<br/>routines/agent.ts"]
+    end
+
+    CLI & WEB & TG & RT --> RUN["runTask<br/>agent/runner.ts<br/>TaskBudget + stream"]
+
+    subgraph agent["Main agent (agent/builder.ts, createAgent)"]
+        LOOP["agent loop<br/>middleware → model → tools"]
+    end
+
+    RUN --> LOOP
+    LOOP <-->|"chat completions"| LLM[("LLM API<br/>OpenRouter / Groq / Ollama<br/>agent/providers.ts")]
+    LOOP --> BUILTIN["built-in tools<br/>calculator, time, ask_user,<br/>write_todos, write_note, memory tools"]
+    LOOP --> MAINMCP["untagged MCP tools<br/>(demo)"]
+    LOOP --> HELPERS["ask_* helpers<br/>agent/subagents/"]
+    HELPERS <-->|"own loop"| LLM
+    HELPERS --> FS["files / shell<br/>tools/fs.ts, tools/shell.ts"]
+    HELPERS --> WEBS["Tavily web search"]
+    HELPERS --> MCP["tagged MCP servers<br/>core/servers/tasks, mail, google<br/>(stdio subprocesses)"]
+
+    LOOP <--> CKPT[("checkpoints<br/>data/luna_checkpoints.sqlite<br/>messages, notes, todos, pauses")]
+    LOOP <--> LTM[("long-term memory<br/>data/luna_longterm.sqlite")]
+    RUN -->|"events"| OUT["what you see:<br/>tokens, tool calls,<br/>pauses, done"]
+```
+
+The same system as a text map, with every storage file:
+
 ```
                          ┌────────────────────────────────────────────┐
  you ── CLI (cli/chat) ──▶ runTurn → runTask (agent/runner)            │
@@ -71,10 +103,124 @@ approvals (`docs/messaging.md`).
 
 ## One message, end to end
 
+The request, as a sequence (web UI; the CLI and Telegram differ only in
+transport):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant Tab as Browser tab
+    participant S as Session<br/>(web/session.ts)
+    participant R as runTask<br/>(agent/runner.ts)
+    participant G as Agent graph<br/>(LangGraph)
+    participant M as LLM API
+    participant T as Tool / helper / MCP
+    participant C as Checkpointer
+
+    You->>Tab: "Hey Luna, what's on today?"
+    Tab->>S: {"type":"message","text":...} over /ws
+    S->>S: new TaskBudget(task_budget)
+    S->>C: getState() → prime EventTranslator
+    S->>R: runTask(agent, {messages:[user]}, {thread_id})
+    R->>G: agent.stream(..., streamMode [messages, updates], subgraphs)
+    G->>C: load thread (history, notes, todos)
+    loop until the model answers without tool calls, or a limit stops it
+        G->>G: beforeModel hooks (budget, limits, summarize)
+        G->>M: system prompt + messages + tool schemas
+        M-->>G: streamed AIMessage (text and/or tool_calls)
+        G-->>S: "messages" chunks → {"type":"token"}
+        G->>G: afterModel hooks (approval check, limits)
+        alt tool calls
+            G->>T: run each tool call (in parallel)
+            T-->>G: ToolMessage results
+            G-->>S: "updates" → tool_call / tool_result events
+        end
+        G->>C: save checkpoint
+    end
+    alt a risky tool or ask_user paused the run
+        R-->>S: pending interrupts
+        S-->>Tab: {"type":"pause"} → you approve / answer
+        Tab->>S: {"type":"resume", answers}
+        S->>R: runTask(Command({resume}), same budget)
+    else finished
+        R-->>S: []
+        S-->>Tab: context meter, then {"type":"done"}
+    end
+```
+
+Inside the agent graph, one loop step at a time. The middleware order comes
+from `buildMiddleware` in `agent/builder.ts`:
+
+```mermaid
+flowchart TD
+    START(["user message<br/>(or resume)"]) --> BA
+
+    BA["beforeAgent<br/>ResetRunLimits: per-message counters = 0<br/>(agent/limits.ts)"] --> BM1
+
+    subgraph before["beforeModel hooks (list order)"]
+        BM1["TaskBudget: used++ or stop<br/>(agent/budget.ts)"] --> BM2
+        BM2["ModelCallLimit: run count ≥ max_model_calls → stop"] --> BM3
+        BM3["Summarization: history > summary_trigger_tokens<br/>→ old messages replaced by a summary<br/>(one extra LLM call)"]
+    end
+
+    BM3 --> WRAP
+
+    subgraph wrap["model_request node: wrapModelCall onion (first = outermost)"]
+        WRAP["TodoList: + todo instructions"] --> W2["Scratchpad: + notes & todos<br/>(agent/scratchpad.ts)"]
+        W2 --> W3["LongTermMemory: + pinned & matching memories<br/>(agent/longterm.ts)"]
+        W3 --> LLM[["LLM call<br/>ChatOpenAI.invoke"]]
+    end
+
+    LLM --> AM
+
+    subgraph after["afterModel hooks (reverse order)"]
+        AM["HITL: risky tool call? → interrupt (pause)"] --> AM2
+        AM2["TodoList / ToolCallLimit: refuse calls past max_tool_calls"] --> AM3
+        AM3["ModelCallLimit: count this call"]
+    end
+
+    AM3 --> Q{tool calls?}
+    Q -->|no| END(["afterAgent → final answer<br/>checkpoint saved"])
+    Q -->|yes| TOOLS["tools node<br/>one task per call, in parallel<br/>built-ins, MCP, ask_* helpers"]
+    TOOLS --> BM1
+
+    BM1 -.->|"budget empty"| STOP1(["'Task budget exhausted'"])
+    BM2 -.->|"limit reached"| STOP2(["'Model call limits exceeded'"])
+    AM -.->|"needs approval"| PAUSE(["interrupt → pause,<br/>resumed later with Command"])
+```
+
+What one model call actually sends:
+
+```mermaid
+flowchart LR
+    subgraph sys["System message (rebuilt every call)"]
+        P1["role + reply style + 'Sir' + your profile<br/>+ config/persona.md<br/>agent/persona.ts buildSystemPrompt"]
+        P2["todo-list instructions<br/>todoListMiddleware"]
+        P3["section: Task scratchpad<br/>current todos + your notes<br/>agent/scratchpad.ts"]
+        P4["section: Long-term memory<br/>pinned + keyword matches for the<br/>latest user message (capped at memory_prompt_chars)<br/>agent/longterm.ts"]
+        P1 --> P2 --> P3 --> P4
+    end
+    subgraph msgs["Messages"]
+        H["thread history from the checkpoint<br/>(older part replaced by a summary<br/>past summary_trigger_tokens)"]
+        U["your new message"]
+        TR["earlier tool calls + results<br/>of this message"]
+    end
+    subgraph tools["Tool schemas"]
+        TS["name + description + JSON schema<br/>of every tool the agent can call<br/>(built-ins, memory, todo/note,<br/>untagged MCP, ask_* helpers)"]
+    end
+    sys & msgs & tools --> REQ[["one chat-completions request"]]
+```
+
+More diagrams (helpers inside a message) and how to trace and measure each
+prompt are in [`docs/prompt-lifecycle.md`](docs/prompt-lifecycle.md).
+
+In words:
+
 1. `runTurn` creates a `TaskBudget` and calls `runTask` with the message.
-2. `runTask` puts the budget in a context variable and streams
-   `agent.astream(..., subgraphs=True)`; the CLI prints text, tool calls and
-   helper steps (indented) as they arrive.
+2. `runTask` puts the budget in AsyncLocalStorage and streams
+   `agent.stream(..., { subgraphs: true })`; the CLI prints text, tool calls
+   and helper steps (indented) as they arrive.
 3. Before every model call, in any agent, `taskBudgetMiddleware` takes one unit.
    The main agent sees its system prompt (role + persona: style, "Sir",
    user profile, `config/persona.md`; built by `agent/persona.ts`) plus the
@@ -86,7 +232,8 @@ approvals (`docs/messaging.md`).
 5. A risky tool (write, edit, run, send…) or `ask_user` pauses the graph. The
    run ends; `runTask` returns the pending pauses from `getState()`.
 6. `runTurn` asks you, then calls `runTask` again with
-   `Command(resume={id: answer})` and the same budget. Repeat until no pauses.
+   `new Command({ resume: { [id]: answer } })` and the same budget. Repeat
+   until no pauses.
 7. Any `remember` / `suggest_*` call only queued a suggestion; the user
    accepts or declines it in the web Memory panel or with `/memory`
    (`docs/memory.md`).
@@ -131,8 +278,8 @@ core/                      the backend (TypeScript, Node ≥ 22.18, D41); packag
     cli/chat.ts            REPL (luna [--resume]), printing, pause handling (runTurn,
                            answerInterrupt), /sessions /resume /delete (sessionCommand),
                            /memory (memoryCommand)
-    voice/tts.ts           PiperTTS: runs the Piper program per sentence (/api/tts)
-    voice/stt.ts           WhisperSTT: whisper.cpp via @fugood/whisper.node (/api/stt)
+    voice/tts.ts           PiperTTS: espeak-ng phonemes → Piper voice ONNX on onnxruntime (/api/tts)
+    voice/stt.ts           WhisperSTT: Whisper ONNX via @huggingface/transformers, silence gate (/api/stt)
     voice/wav.ts           WAV ⇄ 16-bit PCM; voice/download.ts fetches models once
     web/
       server.ts            luna-web: Hono routes + the ws /ws socket, /api/tts, /api/stt,
@@ -222,6 +369,7 @@ docs/cli.md                luna commands, /memory, approvals
 docs/agents-and-tools.md   main agent, helpers, MCP servers, how to extend
 docs/development.md        setup, layout, tests, web dev, which docs to update
 docs/web-ui.md             running the web UI, voice setup, WebSocket protocol
+docs/prompt-lifecycle.md   mermaid diagrams of one prompt end to end; how to trace and measure it
 docs/control-center.md     Control Center: apps, routines, what applies when, HTTP API
 docs/memory.md             short- vs long-term memory, suggestions inbox, /memory
 docs/mail.md               mail setup, tools, approval
